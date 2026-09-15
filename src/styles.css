@@ -216,6 +216,9 @@ button.secondary:hover {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.xterm-container .xterm {
   padding: 0.5rem;
 }
 
