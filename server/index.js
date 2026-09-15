@@ -16,7 +16,7 @@ import {
   defaultCwd,
 } from './sessionManager.js';
 
-const HOST = '127.0.0.1';
+const HOST = '0.0.0.0';
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3200;
 const isProd = process.env.NODE_ENV === 'production';
 
