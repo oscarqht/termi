@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { exec as execCb } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -16,7 +17,26 @@ import {
   defaultCwd,
 } from './sessionManager.js';
 
-const HOST = '0.0.0.0';
+// Tailscale assigns addresses from the CGNAT range 100.64.0.0/10.
+function isTailscaleIP(ip) {
+  const [a, b] = ip.split('.').map(Number);
+  return a === 100 && b >= 64 && b <= 127;
+}
+
+function resolveHost() {
+  if (process.env.HOST) return process.env.HOST;
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal && isTailscaleIP(addr.address)) {
+        return addr.address;
+      }
+    }
+  }
+  console.warn('[termi] No Tailscale interface found; binding to 127.0.0.1 only.');
+  return '127.0.0.1';
+}
+
+const HOST = resolveHost();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3200;
 const isProd = process.env.NODE_ENV === 'production';
 
