@@ -9,7 +9,7 @@ function paramsFromLocation() {
   const url = new URL(window.location.href);
   return {
     cwd: url.searchParams.get('cwd') ?? '',
-    cmd: url.searchParams.get('cmd') ?? '',
+    cmds: url.searchParams.getAll('cmd').filter((c) => c.trim()),
     session: url.searchParams.get('session'),
   };
 }
@@ -23,9 +23,10 @@ function setSessionParam(id: string) {
 export default function Terminal() {
   const initial = paramsFromLocation();
   const [cwd, setCwd] = useState(initial.cwd);
-  const [cmd] = useState(initial.cmd);
+  const [cmds] = useState(initial.cmds);
+  const [cmd, setCmd] = useState(initial.cmds[0] ?? '');
   const [phase, setPhase] = useState<Phase>(
-    initial.session || !initial.cmd ? 'connecting' : 'confirm',
+    initial.session || initial.cmds.length === 0 ? 'connecting' : 'confirm',
   );
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,7 +107,7 @@ export default function Terminal() {
   useEffect(() => {
     if (initial.session) {
       connect(initial.session);
-    } else if (!initial.cmd) {
+    } else if (initial.cmds.length === 0) {
       startTerminal();
     }
     return () => {
@@ -152,11 +153,11 @@ export default function Terminal() {
           <dd>
             <code>{cwd || '(home directory)'}</code>
           </dd>
-          {cmd && (
+          {cmds.length === 1 && (
             <>
               <dt>Initial command</dt>
               <dd>
-                <code>{cmd}</code>
+                <code>{cmds[0]}</code>
               </dd>
             </>
           )}
@@ -169,6 +170,22 @@ export default function Terminal() {
           Working directory
           <input value={cwd} onChange={(e) => setCwd(e.target.value)} />
         </label>
+        {cmds.length > 1 && (
+          <div className="cmd-choices">
+            <span className="cmd-list-label">Choose an initial command</span>
+            {cmds.map((c) => (
+              <label className="cmd-choice" key={c}>
+                <input
+                  type="radio"
+                  name="cmd-choice"
+                  checked={cmd === c}
+                  onChange={() => setCmd(c)}
+                />
+                <code>{c}</code>
+              </label>
+            ))}
+          </div>
+        )}
         <button onClick={startTerminal}>Start terminal</button>
       </main>
     );

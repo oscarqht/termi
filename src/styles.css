@@ -59,6 +59,44 @@ body {
   gap: 0.5rem;
 }
 
+.cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #9aa0a6;
+}
+
+.cmd-list-label {
+  font-size: 0.85rem;
+  color: #9aa0a6;
+}
+
+.cmd-list .secondary {
+  align-self: auto;
+}
+
+.cmd-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.cmd-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #e6e6e6;
+}
+
+.cmd-choice code {
+  background: #0f1115;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
 .input-with-button input {
   flex: 1;
   min-width: 0;

@@ -10,9 +10,21 @@ type SessionInfo = {
 
 export default function Home() {
   const [cwd, setCwd] = useState('');
-  const [cmd, setCmd] = useState('');
+  const [cmds, setCmds] = useState(['']);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [copied, setCopied] = useState(false);
+
+  function updateCmd(index: number, value: string) {
+    setCmds((prev) => prev.map((c, i) => (i === index ? value : c)));
+  }
+
+  function addCmd() {
+    setCmds((prev) => [...prev, '']);
+  }
+
+  function removeCmd(index: number) {
+    setCmds((prev) => prev.filter((_, i) => i !== index));
+  }
 
   useEffect(() => {
     fetch('/api/default-cwd')
@@ -36,7 +48,9 @@ export default function Home() {
   function termUrl() {
     const params = new URLSearchParams();
     if (cwd.trim()) params.set('cwd', cwd.trim());
-    if (cmd.trim()) params.set('cmd', cmd.trim());
+    for (const cmd of cmds) {
+      if (cmd.trim()) params.append('cmd', cmd.trim());
+    }
     return `${window.location.origin}/term?${params.toString()}`;
   }
 
@@ -93,14 +107,26 @@ export default function Home() {
             </button>
           </div>
         </label>
-        <label>
-          Initial command (optional)
-          <input
-            value={cmd}
-            onChange={(e) => setCmd(e.target.value)}
-            placeholder="npm run dev"
-          />
-        </label>
+        <div className="cmd-list">
+          <span className="cmd-list-label">Initial command (optional)</span>
+          {cmds.map((cmd, i) => (
+            <div className="input-with-button" key={i}>
+              <input
+                value={cmd}
+                onChange={(e) => updateCmd(i, e.target.value)}
+                placeholder="npm run dev"
+              />
+              {cmds.length > 1 && (
+                <button type="button" className="secondary" onClick={() => removeCmd(i)}>
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button" className="secondary" onClick={addCmd}>
+            + Add another command
+          </button>
+        </div>
         <div className="form-actions">
           <button type="submit">Open terminal</button>
           <button type="button" className="secondary" onClick={copyUrl}>
