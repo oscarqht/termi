@@ -8,11 +8,45 @@ type SessionInfo = {
   connected: boolean;
 };
 
+const RECENT_CWDS_KEY = 'termi:recentCwds';
+const RECENT_CMDS_KEY = 'termi:recentCmds';
+const MAX_RECENT = 10;
+
+function loadRecent(key: string): string[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberRecent(key: string, value: string, current: string[]): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return current;
+  const next = [trimmed, ...current.filter((v) => v !== trimmed)].slice(0, MAX_RECENT);
+  try {
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch {
+    // ignore storage errors (e.g. private browsing quota)
+  }
+  return next;
+}
+
 export default function Home() {
   const [cwd, setCwd] = useState('');
   const [cmds, setCmds] = useState(['']);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [copied, setCopied] = useState(false);
+  const [recentCwds, setRecentCwds] = useState<string[]>([]);
+  const [recentCmds, setRecentCmds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setRecentCwds(loadRecent(RECENT_CWDS_KEY));
+    setRecentCmds(loadRecent(RECENT_CMDS_KEY));
+  }, []);
 
   function updateCmd(index: number, value: string) {
     setCmds((prev) => prev.map((c, i) => (i === index ? value : c)));
@@ -54,8 +88,20 @@ export default function Home() {
     return `${window.location.origin}/term?${params.toString()}`;
   }
 
+  function rememberCurrentValues() {
+    setRecentCwds((prev) => rememberRecent(RECENT_CWDS_KEY, cwd, prev));
+    setRecentCmds((prev) => {
+      let next = prev;
+      for (const cmd of cmds) {
+        next = rememberRecent(RECENT_CMDS_KEY, cmd, next);
+      }
+      return next;
+    });
+  }
+
   function openTerminal(e: React.FormEvent) {
     e.preventDefault();
+    rememberCurrentValues();
     window.open(termUrl(), '_blank');
   }
 
@@ -71,6 +117,7 @@ export default function Home() {
   }
 
   async function copyUrl() {
+    rememberCurrentValues();
     const url = termUrl();
     try {
       await navigator.clipboard.writeText(url);
@@ -101,12 +148,23 @@ export default function Home() {
               value={cwd}
               onChange={(e) => setCwd(e.target.value)}
               placeholder="~/projects/my-app"
+              list="recent-cwds"
             />
             <button type="button" className="secondary" onClick={browseFolder}>
               Browse…
             </button>
           </div>
         </label>
+        <datalist id="recent-cwds">
+          {recentCwds.map((c) => (
+            <option value={c} key={c} />
+          ))}
+        </datalist>
+        <datalist id="recent-cmds">
+          {recentCmds.map((c) => (
+            <option value={c} key={c} />
+          ))}
+        </datalist>
         <div className="cmd-list">
           <span className="cmd-list-label">Initial command (optional)</span>
           {cmds.map((cmd, i) => (
@@ -115,6 +173,7 @@ export default function Home() {
                 value={cmd}
                 onChange={(e) => updateCmd(i, e.target.value)}
                 placeholder="npm run dev"
+                list="recent-cmds"
               />
               {cmds.length > 1 && (
                 <button type="button" className="secondary" onClick={() => removeCmd(i)}>
