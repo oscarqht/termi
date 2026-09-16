@@ -229,6 +229,14 @@ button.secondary:hover {
   padding: 0.5rem;
 }
 
+.xterm-container .xterm-viewport {
+  scrollbar-width: none;
+}
+
+.xterm-container .xterm-viewport::-webkit-scrollbar {
+  display: none;
+}
+
 .banner {
   background: #ff6b6b;
   color: #1a1a1a;
@@ -344,3 +352,200 @@ button.danger:hover {
 .terminal-page {
   position: relative;
 }
+
+.common-cmds-section {
+  border-top: 1px solid #232733;
+  margin-top: 0.5rem;
+  padding-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.common-cmds-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.common-cmds-desc {
+  font-size: 0.8rem;
+  color: #80868b;
+  margin: 0.2rem 0 0 0;
+}
+
+.common-cmds-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+button.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #4f8cff;
+  font-size: 0.8rem;
+  font-weight: normal;
+  cursor: pointer;
+  align-self: auto;
+}
+
+button.link-button:hover {
+  background: none;
+  color: #72a4ff;
+  text-decoration: underline;
+}
+
+.common-cmds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.25rem 0;
+}
+
+.common-cmd-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: #11141a;
+  border: 1px solid #232733;
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.common-cmd-item.active {
+  border-color: #2e3748;
+  background: #131722;
+}
+
+.new-terminal-form label.common-cmd-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  user-select: none;
+  color: #e6e6e6;
+  font-size: 0.85rem;
+}
+
+.new-terminal-form label.common-cmd-label input[type="checkbox"] {
+  accent-color: #4f8cff;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.common-cmd-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.common-cmd-info code {
+  background: #0a0c10;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: #e6e6e6;
+  word-break: break-all;
+}
+
+.common-cmd-explanation {
+  font-size: 0.8rem;
+  color: #9aa0a6;
+}
+
+button.common-cmd-remove-btn {
+  background: none;
+  border: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #666;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  align-self: center;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+button.common-cmd-remove-btn:hover {
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+}
+
+.common-cmds-empty {
+  padding: 0.75rem;
+  background: #11141a;
+  border-radius: 6px;
+  border: 1px dashed #2a2f3a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.common-cmds-empty p {
+  margin: 0;
+}
+
+.add-common-cmd-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.add-common-cmd-input {
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0f1115;
+  color: #e6e6e6;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+
+.add-common-explanation-input {
+  flex: 1 1 220px;
+  min-width: 180px;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0f1115;
+  color: #e6e6e6;
+  font-size: 0.85rem;
+}
+
+.add-common-cmd-row button {
+  align-self: stretch;
+  white-space: nowrap;
+}
+
+.cmd-explanation {
+  color: #9aa0a6;
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+

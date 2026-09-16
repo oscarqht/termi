@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { getCommonCmdExplanationMap } from '../commonCmds';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'exited' | 'error';
 
@@ -52,6 +53,7 @@ export default function Terminal() {
   );
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const explanationMap = getCommonCmdExplanationMap();
   const [uploading, setUploading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -284,6 +286,9 @@ export default function Terminal() {
               <dt>Initial command</dt>
               <dd>
                 <code>{cmds[0]}</code>
+                {explanationMap[cmds[0]] && (
+                  <span className="cmd-explanation"> — {explanationMap[cmds[0]]}</span>
+                )}
               </dd>
             </>
           )}
@@ -311,6 +316,9 @@ export default function Terminal() {
                   }}
                 />
                 <code>{c}</code>
+                {explanationMap[c] && (
+                  <span className="cmd-explanation"> — {explanationMap[c]}</span>
+                )}
               </label>
             ))}
           </div>

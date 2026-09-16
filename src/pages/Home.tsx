@@ -1,4 +1,10 @@
 import { useEffect, useState } from 'react';
+import {
+  type CommonCmd,
+  DEFAULT_COMMON_CMDS,
+  loadCommonCmds,
+  saveCommonCmds,
+} from '../commonCmds';
 
 type SessionInfo = {
   id: string;
@@ -38,6 +44,9 @@ function rememberRecent(key: string, value: string, current: string[]): string[]
 export default function Home() {
   const [cwd, setCwd] = useState('');
   const [cmds, setCmds] = useState(['']);
+  const [commonCmds, setCommonCmds] = useState<CommonCmd[]>(() => loadCommonCmds());
+  const [newCmd, setNewCmd] = useState('');
+  const [newExplanation, setNewExplanation] = useState('');
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [copied, setCopied] = useState(false);
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
@@ -90,11 +99,62 @@ export default function Home() {
     };
   }, []);
 
+  function toggleCommonCmd(id: string) {
+    setCommonCmds((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, enabled: !c.enabled } : c));
+      saveCommonCmds(next);
+      return next;
+    });
+  }
+
+  function removeCommonCmd(id: string) {
+    setCommonCmds((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      saveCommonCmds(next);
+      return next;
+    });
+  }
+
+  function addCommonCmd() {
+    const trimmedCmd = newCmd.trim();
+    if (!trimmedCmd) return;
+    const newEntry: CommonCmd = {
+      id: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      cmd: trimmedCmd,
+      explanation: newExplanation.trim(),
+      enabled: true,
+    };
+    setCommonCmds((prev) => {
+      const next = [...prev, newEntry];
+      saveCommonCmds(next);
+      return next;
+    });
+    setNewCmd('');
+    setNewExplanation('');
+  }
+
+  function resetCommonCmds() {
+    setCommonCmds(DEFAULT_COMMON_CMDS);
+    saveCommonCmds(DEFAULT_COMMON_CMDS);
+  }
+
   function termUrl() {
     const params = new URLSearchParams();
     if (cwd.trim()) params.set('cwd', cwd.trim());
+    const seen = new Set<string>();
     for (const cmd of cmds) {
-      if (cmd.trim()) params.append('cmd', cmd.trim());
+      const trimmed = cmd.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        params.append('cmd', trimmed);
+      }
+    }
+    for (const item of commonCmds) {
+      const trimmed = item.cmd.trim();
+      if (item.enabled && trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        params.append('cmd', trimmed);
+      }
     }
     return `${window.location.origin}/term?${params.toString()}`;
   }
@@ -211,6 +271,112 @@ export default function Home() {
             + Add another command
           </button>
         </div>
+
+        <div className="common-cmds-section">
+          <div className="common-cmds-header">
+            <div>
+              <span className="cmd-list-label">Common initial commands</span>
+              <p className="common-cmds-desc">
+                Select commands to include in Open Terminal or Copy URL.
+              </p>
+            </div>
+            {commonCmds.length > 0 && (
+              <div className="common-cmds-header-actions">
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    const allEnabled = commonCmds.every((c) => c.enabled);
+                    setCommonCmds((prev) => {
+                      const next = prev.map((c) => ({ ...c, enabled: !allEnabled }));
+                      saveCommonCmds(next);
+                      return next;
+                    });
+                  }}
+                >
+                  {commonCmds.every((c) => c.enabled) ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="common-cmds-list">
+            {commonCmds.map((c) => (
+              <div key={c.id} className={`common-cmd-item${c.enabled ? ' active' : ''}`}>
+                <label className="common-cmd-label">
+                  <input
+                    type="checkbox"
+                    checked={c.enabled}
+                    onChange={() => toggleCommonCmd(c.id)}
+                  />
+                  <div className="common-cmd-info">
+                    <code>{c.cmd}</code>
+                    {c.explanation && (
+                      <span className="common-cmd-explanation">{c.explanation}</span>
+                    )}
+                  </div>
+                </label>
+                <button
+                  type="button"
+                  className="common-cmd-remove-btn"
+                  onClick={() => removeCommonCmd(c.id)}
+                  title="Remove command"
+                  aria-label={`Remove ${c.cmd}`}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+            {commonCmds.length === 0 && (
+              <div className="common-cmds-empty">
+                <p className="muted">No common commands configured.</p>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={resetCommonCmds}
+                >
+                  Restore default examples
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="add-common-cmd-row">
+            <input
+              value={newCmd}
+              onChange={(e) => setNewCmd(e.target.value)}
+              placeholder="Command (e.g. agy)"
+              className="add-common-cmd-input"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addCommonCmd();
+                }
+              }}
+            />
+            <input
+              value={newExplanation}
+              onChange={(e) => setNewExplanation(e.target.value)}
+              placeholder="Concise explanation (e.g. Google Antigravity CLI)"
+              className="add-common-explanation-input"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addCommonCmd();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="secondary"
+              onClick={addCommonCmd}
+              disabled={!newCmd.trim()}
+            >
+              + Add
+            </button>
+          </div>
+        </div>
+
         <div className="form-actions">
           <button type="submit">Open terminal</button>
           <button type="button" className="secondary" onClick={copyUrl}>
