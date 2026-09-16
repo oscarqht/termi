@@ -23,6 +23,22 @@ import {
 // Cap a single uploaded file at 100MB.
 const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
 
+const STATIC_MIME_TYPES = {
+  '.html': 'text/html',
+  '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+};
+
 // Tailscale assigns addresses from the CGNAT range 100.64.0.0/10.
 function isTailscaleIP(ip) {
   const [a, b] = ip.split('.').map(Number);
@@ -241,6 +257,8 @@ async function createServer() {
     const distDir = path.resolve(import.meta.dirname, '..', 'dist');
     const filePath = path.join(distDir, url.pathname);
     if (url.pathname !== '/' && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      const mimeType = STATIC_MIME_TYPES[path.extname(filePath)];
+      if (mimeType) res.setHeader('Content-Type', mimeType);
       res.end(fs.readFileSync(filePath));
       return;
     }
