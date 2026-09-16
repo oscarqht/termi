@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { exec as execCb } from 'node:child_process';
 import { promisify } from 'node:util';
 import { WebSocketServer } from 'ws';
@@ -16,7 +17,11 @@ import {
   writeToSession,
   defaultCwd,
   killSession,
+  ensureUploadDir,
 } from './sessionManager.js';
+
+// Cap a single uploaded file at 100MB.
+const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
 
 // Tailscale assigns addresses from the CGNAT range 100.64.0.0/10.
 function isTailscaleIP(ip) {
@@ -51,6 +56,50 @@ async function readJsonBody(req) {
   for await (const chunk of req) chunks.push(chunk);
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+// Strip directory separators and other filesystem-hostile characters, keeping
+// the upload's basename only.
+function sanitizeFilename(name) {
+  const base = path.basename(name).trim();
+  const cleaned = base.replace(/[\\/\0]/g, '_').replace(/^\.+/, '');
+  return cleaned || 'upload';
+}
+
+// Avoid clobbering an existing file with the same name in this session's
+// upload dir by suffixing with a short random id.
+function uniqueDestPath(dir, name) {
+  let dest = path.join(dir, name);
+  if (!fs.existsSync(dest)) return dest;
+  const ext = path.extname(name);
+  const stem = name.slice(0, name.length - ext.length);
+  do {
+    dest = path.join(dir, `${stem}-${crypto.randomUUID().slice(0, 8)}${ext}`);
+  } while (fs.existsSync(dest));
+  return dest;
+}
+
+function streamRequestToFile(req, destPath, maxBytes) {
+  return new Promise((resolve, reject) => {
+    let received = 0;
+    const out = fs.createWriteStream(destPath);
+    req.on('data', (chunk) => {
+      received += chunk.length;
+      if (received > maxBytes) {
+        const err = new Error('File too large');
+        err.status = 413;
+        req.destroy(err);
+      }
+    });
+    req.on('error', (err) => {
+      out.destroy();
+      fs.unlink(destPath, () => {});
+      reject(err.status ? err : Object.assign(new Error('Upload failed'), { status: 400 }));
+    });
+    out.on('error', (err) => reject(err));
+    out.on('finish', resolve);
+    req.pipe(out);
+  });
 }
 
 async function handleApi(req, res, url) {
@@ -118,6 +167,35 @@ async function handleApi(req, res, url) {
     const session = createSession({ cwd: resolvedCwd, cmd });
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd }));
+    return true;
+  }
+
+  if (req.method === 'POST' && /^\/api\/sessions\/[^/]+\/upload$/.test(url.pathname)) {
+    const id = url.pathname.slice('/api/sessions/'.length, -'/upload'.length);
+    const session = getSession(id);
+    if (!session) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Session not found' }));
+      return true;
+    }
+
+    const rawName = url.searchParams.get('name') || 'upload';
+    const safeName = sanitizeFilename(rawName);
+    const uploadDir = ensureUploadDir(session);
+    const destPath = uniqueDestPath(uploadDir, safeName);
+
+    try {
+      await streamRequestToFile(req, destPath, UPLOAD_MAX_BYTES);
+    } catch (err) {
+      res.statusCode = err.status ?? 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: err.message }));
+      return true;
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ path: destPath, name: path.basename(destPath) }));
     return true;
   }
 

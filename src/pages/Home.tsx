@@ -76,7 +76,18 @@ export default function Home() {
     };
     refresh();
     const id = setInterval(refresh, 3000);
-    return () => clearInterval(id);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', refresh);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', refresh);
+    };
   }, []);
 
   function termUrl() {

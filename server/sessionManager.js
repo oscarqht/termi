@@ -1,6 +1,8 @@
 import pty from 'node-pty';
 import crypto from 'node:crypto';
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // Cap on buffered output kept per session for replay to a reconnecting client.
 const BUFFER_MAX_CHARS = 500_000;
@@ -39,6 +41,7 @@ export function createSession({ cwd, cmd }) {
     pty: term,
     buffer: '',
     clients: new Set(),
+    uploadDir: path.join(os.tmpdir(), 'termi-uploads', id),
   };
 
   term.onData((data) => {
@@ -61,6 +64,7 @@ export function createSession({ cwd, cmd }) {
       }
     }
     sessions.delete(id);
+    fs.rm(session.uploadDir, { recursive: true, force: true }, () => {});
   });
 
   if (cmd && cmd.trim().length > 0) {
@@ -94,6 +98,11 @@ export function resizeSession(session, cols, rows) {
 
 export function writeToSession(session, data) {
   session.pty.write(data);
+}
+
+export function ensureUploadDir(session) {
+  fs.mkdirSync(session.uploadDir, { recursive: true });
+  return session.uploadDir;
 }
 
 export function defaultCwd() {
