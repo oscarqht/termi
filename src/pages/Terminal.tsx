@@ -144,6 +144,18 @@ export default function Terminal() {
     }
   }
 
+
+  async function handleClose() {
+    if (sessionIdRef.current) {
+      try {
+        await fetch(`/api/sessions/${sessionIdRef.current}`, { method: 'DELETE' });
+        window.close();
+      } catch (err) {
+        console.error('Failed to close session', err);
+      }
+    }
+  }
+
   if (phase === 'confirm' || phase === 'error') {
     return (
       <main className="page confirm-page">
@@ -191,8 +203,11 @@ export default function Terminal() {
     );
   }
 
-  return (
+return (
     <div className="terminal-page">
+      <button className="floating-close danger small" onClick={handleClose} title="Close session">
+        Close
+      </button>
       {phase === 'exited' && <div className="banner">Process exited.</div>}
       <div ref={containerRef} className="xterm-container" />
     </div>

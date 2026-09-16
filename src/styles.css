@@ -228,3 +228,49 @@ button.secondary:hover {
   padding: 0.4rem 1rem;
   font-size: 0.85rem;
 }
+
+.session-list li {
+  justify-content: space-between;
+}
+
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.session-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+button.small {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+button.danger {
+  background: #ff4d4d;
+  color: white;
+}
+
+button.danger:hover {
+  background: #ff3333;
+}
+
+.floating-close {
+  position: absolute;
+  top: 1rem;
+  right: 2rem;
+  z-index: 100;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.floating-close:hover {
+  opacity: 1;
+}
+
+.terminal-page {
+  position: relative;
+}

@@ -15,6 +15,7 @@ import {
   resizeSession,
   writeToSession,
   defaultCwd,
+  killSession,
 } from './sessionManager.js';
 
 // Tailscale assigns addresses from the CGNAT range 100.64.0.0/10.
@@ -119,6 +120,15 @@ async function handleApi(req, res, url) {
     res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd }));
     return true;
   }
+
+  if (req.method === 'DELETE' && url.pathname.startsWith('/api/sessions/')) {
+    const id = url.pathname.slice('/api/sessions/'.length);
+    killSession(id);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: true }));
+    return true;
+  }
+
 
   return false;
 }

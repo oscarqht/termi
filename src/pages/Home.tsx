@@ -135,6 +135,20 @@ export default function Home() {
     setTimeout(() => setCopied(false), 1500);
   }
 
+
+  async function resumeSession(id: string) {
+    window.open(`${window.location.origin}/term?session=${id}`, '_blank');
+  }
+
+  async function closeSession(id: string) {
+    try {
+      await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      alert('Failed to close session');
+    }
+  }
+
   return (
     <main className="page">
       <h1>termi</h1>
@@ -198,10 +212,16 @@ export default function Home() {
       {sessions.length === 0 && <p className="muted">No terminals running.</p>}
       <ul className="session-list">
         {sessions.map((s) => (
-          <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
-            <span className="dot" />
-            <code>{s.cwd}</code>
-            {s.cmd && <span className="cmd"> — {s.cmd}</span>}
+<li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
+            <div className="session-info">
+              <span className="dot" />
+              <code>{s.cwd}</code>
+              {s.cmd && <span className="cmd"> — {s.cmd}</span>}
+            </div>
+            <div className="session-actions">
+              <button type="button" className="secondary small" onClick={() => resumeSession(s.id)}>Resume</button>
+              <button type="button" className="danger small" onClick={() => closeSession(s.id)}>Close</button>
+            </div>
           </li>
         ))}
       </ul>

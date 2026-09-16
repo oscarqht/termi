@@ -2,11 +2,6 @@ import pty from 'node-pty';
 import crypto from 'node:crypto';
 import os from 'node:os';
 
-// How long a session's PTY is kept alive after its WebSocket disconnects,
-// so a page refresh (or brief network blip) reconnects to the same process
-// instead of losing it.
-const GRACE_PERIOD_MS = 12_000;
-
 // Cap on buffered output kept per session for replay to a reconnecting client.
 const BUFFER_MAX_CHARS = 500_000;
 
@@ -22,7 +17,7 @@ export function listSessions() {
     cwd: s.cwd,
     cmd: s.cmd,
     createdAt: s.createdAt,
-    connected: s.ws !== null,
+    connected: s.clients.size > 0,
   }));
 }
 
@@ -43,8 +38,7 @@ export function createSession({ cwd, cmd }) {
     createdAt: Date.now(),
     pty: term,
     buffer: '',
-    ws: null,
-    killTimer: null,
+    clients: new Set(),
   };
 
   term.onData((data) => {
@@ -52,17 +46,20 @@ export function createSession({ cwd, cmd }) {
     if (session.buffer.length > BUFFER_MAX_CHARS) {
       session.buffer = session.buffer.slice(session.buffer.length - BUFFER_MAX_CHARS);
     }
-    if (session.ws && session.ws.readyState === session.ws.OPEN) {
-      session.ws.send(JSON.stringify({ type: 'output', data }));
+    for (const client of session.clients) {
+      if (client.readyState === 1 /* OPEN */) {
+        client.send(JSON.stringify({ type: 'output', data }));
+      }
     }
   });
 
   term.onExit(({ exitCode }) => {
-    if (session.ws && session.ws.readyState === session.ws.OPEN) {
-      session.ws.send(JSON.stringify({ type: 'exit', code: exitCode }));
-      session.ws.close();
+    for (const client of session.clients) {
+      if (client.readyState === 1 /* OPEN */) {
+        client.send(JSON.stringify({ type: 'exit', code: exitCode }));
+        client.close();
+      }
     }
-    clearTimeout(session.killTimer);
     sessions.delete(id);
   });
 
@@ -79,26 +76,14 @@ export function getSession(id) {
 }
 
 export function attachClient(session, ws) {
-  // Replace any previous socket for this session (e.g. a stale tab reconnecting).
-  if (session.ws && session.ws !== ws) {
-    session.ws.close();
-  }
-  clearTimeout(session.killTimer);
-  session.killTimer = null;
-  session.ws = ws;
-
+  session.clients.add(ws);
   if (session.buffer) {
     ws.send(JSON.stringify({ type: 'output', data: session.buffer }));
   }
 }
 
 export function detachClient(session, ws) {
-  if (session.ws !== ws) return;
-  session.ws = null;
-  session.killTimer = setTimeout(() => {
-    session.pty.kill();
-    sessions.delete(session.id);
-  }, GRACE_PERIOD_MS);
+  session.clients.delete(ws);
 }
 
 export function resizeSession(session, cols, rows) {
@@ -114,3 +99,22 @@ export function writeToSession(session, data) {
 export function defaultCwd() {
   return os.homedir();
 }
+
+export function killSession(id) {
+  const session = sessions.get(id);
+  if (session) {
+    session.pty.kill();
+    sessions.delete(id);
+  }
+}
+
+// Kill all sessions when server process die
+function killAll() {
+  for (const session of sessions.values()) {
+    session.pty.kill();
+  }
+  sessions.clear();
+}
+process.on('exit', killAll);
+process.on('SIGINT', () => { killAll(); process.exit(); });
+process.on('SIGTERM', () => { killAll(); process.exit(); });
