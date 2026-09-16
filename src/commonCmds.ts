@@ -10,6 +10,8 @@ export const COMMON_CMDS_KEY = 'termi:commonCmds';
 const LEGACY_CODEX_CMD = 'codex . --model gpt-5.6-terra -c model_reasoning_effort="medium"';
 const DEFAULT_CODEX_CMD =
   'codex . --model gpt-5.6-terra -c model_reasoning_effort="medium" --ask-for-approval never --sandbox workspace-write';
+const LEGACY_AGY_CMD = 'agy';
+const DEFAULT_AGY_CMD = 'agy --dangerously-skip-permissions';
 
 export const DEFAULT_COMMON_CMDS: CommonCmd[] = [
   {
@@ -26,8 +28,8 @@ export const DEFAULT_COMMON_CMDS: CommonCmd[] = [
   },
   {
     id: 'cmd-agy',
-    cmd: 'agy',
-    explanation: 'Google Antigravity CLI',
+    cmd: DEFAULT_AGY_CMD,
+    explanation: 'Google Antigravity CLI (bypass permission prompts)',
     enabled: true,
   },
 ];
@@ -41,13 +43,20 @@ export function loadCommonCmds(): CommonCmd[] {
     return parsed
       .map((item, idx) => {
         let cmd = typeof item.cmd === 'string' ? item.cmd : '';
+        let explanation = typeof item.explanation === 'string' ? item.explanation : '';
         if (item.id === 'cmd-codex' && cmd.trim() === LEGACY_CODEX_CMD) {
           cmd = DEFAULT_CODEX_CMD;
+        }
+        if (item.id === 'cmd-agy' && cmd.trim() === LEGACY_AGY_CMD) {
+          cmd = DEFAULT_AGY_CMD;
+          if (explanation === 'Google Antigravity CLI') {
+            explanation = 'Google Antigravity CLI (bypass permission prompts)';
+          }
         }
         return {
           id: typeof item.id === 'string' && item.id ? item.id : `cmd-${idx}`,
           cmd,
-          explanation: typeof item.explanation === 'string' ? item.explanation : '',
+          explanation,
           enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
         };
       })
