@@ -7,10 +7,14 @@ export type CommonCmd = {
 
 export const COMMON_CMDS_KEY = 'termi:commonCmds';
 
+const LEGACY_CODEX_CMD = 'codex . --model gpt-5.6-terra -c model_reasoning_effort="medium"';
+const DEFAULT_CODEX_CMD =
+  'codex . --model gpt-5.6-terra -c model_reasoning_effort="medium" --ask-for-approval never --sandbox workspace-write';
+
 export const DEFAULT_COMMON_CMDS: CommonCmd[] = [
   {
     id: 'cmd-codex',
-    cmd: 'codex . --model gpt-5.6-terra -c model_reasoning_effort="medium"',
+    cmd: DEFAULT_CODEX_CMD,
     explanation: 'Codex with GPT-5.6 Terra (medium reasoning)',
     enabled: true,
   },
@@ -35,12 +39,18 @@ export function loadCommonCmds(): CommonCmd[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return DEFAULT_COMMON_CMDS;
     return parsed
-      .map((item, idx) => ({
-        id: typeof item.id === 'string' && item.id ? item.id : `cmd-${idx}`,
-        cmd: typeof item.cmd === 'string' ? item.cmd : '',
-        explanation: typeof item.explanation === 'string' ? item.explanation : '',
-        enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
-      }))
+      .map((item, idx) => {
+        let cmd = typeof item.cmd === 'string' ? item.cmd : '';
+        if (item.id === 'cmd-codex' && cmd.trim() === LEGACY_CODEX_CMD) {
+          cmd = DEFAULT_CODEX_CMD;
+        }
+        return {
+          id: typeof item.id === 'string' && item.id ? item.id : `cmd-${idx}`,
+          cmd,
+          explanation: typeof item.explanation === 'string' ? item.explanation : '',
+          enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
+        };
+      })
       .filter((c) => c.cmd.trim().length > 0);
   } catch {
     return DEFAULT_COMMON_CMDS;

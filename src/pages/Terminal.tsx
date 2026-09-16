@@ -118,6 +118,19 @@ export default function Terminal() {
   const sessionIdRef = useRef<string | null>(initial.session);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  function showToast(msg: string) {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    setToastError(msg);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastError(null);
+      toastTimeoutRef.current = null;
+    }, 4000);
+  }
 
   function shellQuote(value: string) {
     return `'${value.replace(/'/g, "'\\''")}'`;
@@ -130,14 +143,28 @@ export default function Terminal() {
     }
   }
 
+  function formatImageName(file: File, index = 0): string {
+    const ext = file.type.split('/')[1] || 'png';
+    const cleanExt = ext === 'jpeg' ? 'jpg' : ext;
+    if (file.name && file.name !== 'image.png' && file.name !== 'blob' && !file.name.startsWith('image.')) {
+      return file.name;
+    }
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const suffix = index > 0 ? `-${index + 1}` : '';
+    return `pasted-image-${timestamp}${suffix}.${cleanExt}`;
+  }
+
   async function uploadAndInsertFiles(files: File[]) {
     const sessionId = sessionIdRef.current;
     if (!sessionId || files.length === 0) return;
     setUploading(true);
     try {
       const paths: string[] = [];
-      for (const file of files) {
-        const name = file.name || 'pasted-image.png';
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const name = formatImageName(file, i);
         const res = await fetch(
           `/api/sessions/${sessionId}/upload?name=${encodeURIComponent(name)}`,
           { method: 'POST', body: file },
@@ -151,7 +178,9 @@ export default function Terminal() {
       }
       sendInput(paths.map(shellQuote).join(' '));
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      showToast(msg);
     } finally {
       setUploading(false);
     }
@@ -240,6 +269,9 @@ export default function Terminal() {
       resizeObserverRef.current = null;
       xtermRef.current?.dispose();
       xtermRef.current = null;
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -276,24 +308,28 @@ export default function Terminal() {
     }
     function onPaste(e: ClipboardEvent) {
       const items = [...(e.clipboardData?.items ?? [])];
-      const files = items
-        .filter((item) => item.kind === 'file')
-        .map((item) => item.getAsFile())
-        .filter((f): f is File => f !== null);
-      if (files.length === 0) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const f = item.getAsFile();
+          if (f) imageFiles.push(f);
+        }
+      }
+      if (imageFiles.length === 0) return;
       e.preventDefault();
-      uploadAndInsertFiles(files);
+      e.stopPropagation();
+      uploadAndInsertFiles(imageFiles);
     }
 
     container.addEventListener('dragover', onDragOver);
     container.addEventListener('dragleave', onDragLeave);
     container.addEventListener('drop', onDrop);
-    container.addEventListener('paste', onPaste);
+    window.addEventListener('paste', onPaste, true);
     return () => {
       container.removeEventListener('dragover', onDragOver);
       container.removeEventListener('dragleave', onDragLeave);
       container.removeEventListener('drop', onDrop);
-      container.removeEventListener('paste', onPaste);
+      window.removeEventListener('paste', onPaste, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -453,6 +489,11 @@ return (
           </svg>
         </button>
       </div>
+      {toastError && (
+        <div className="terminal-toast-error" role="alert">
+          {toastError}
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"
