@@ -6,6 +6,63 @@ import { getCommonCmdExplanationMap } from '../commonCmds';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'exited' | 'error';
 
+const LIGHT_THEME = {
+  background: '#ffffff',
+  foreground: '#24292f',
+  cursor: '#24292f',
+  cursorAccent: '#ffffff',
+  selectionBackground: '#b4d5fe',
+  selectionForeground: '#24292f',
+  black: '#24292f',
+  red: '#cf222e',
+  green: '#116329',
+  yellow: '#4d3800',
+  blue: '#0969da',
+  magenta: '#8250df',
+  cyan: '#1b7c83',
+  white: '#6e7781',
+  brightBlack: '#57606a',
+  brightRed: '#a40e26',
+  brightGreen: '#1a7f37',
+  brightYellow: '#633c01',
+  brightBlue: '#218bff',
+  brightMagenta: '#a475f9',
+  brightCyan: '#3192aa',
+  brightWhite: '#8c959f',
+};
+
+const DARK_THEME = {
+  background: '#0f1115',
+  foreground: '#e6e6e6',
+  cursor: '#e6e6e6',
+  cursorAccent: '#0f1115',
+  selectionBackground: 'rgba(79, 140, 255, 0.35)',
+  selectionForeground: '#ffffff',
+  black: '#282c34',
+  red: '#e06c75',
+  green: '#98c379',
+  yellow: '#e5c07b',
+  blue: '#61afef',
+  magenta: '#c678dd',
+  cyan: '#56b6c2',
+  white: '#abb2bf',
+  brightBlack: '#5c6370',
+  brightRed: '#be5046',
+  brightGreen: '#98c379',
+  brightYellow: '#d19a66',
+  brightBlue: '#61afef',
+  brightMagenta: '#c678dd',
+  brightCyan: '#56b6c2',
+  brightWhite: '#ffffff',
+};
+
+function getSystemTheme() {
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) {
+    return LIGHT_THEME;
+  }
+  return DARK_THEME;
+}
+
 const LAST_INITIAL_CMD_KEY = 'termi:lastInitialCmd';
 
 function loadLastInitialCmd(): string | null {
@@ -112,6 +169,7 @@ export default function Terminal() {
         cursorBlink: true,
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: 13,
+        theme: getSystemTheme(),
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
@@ -184,6 +242,19 @@ export default function Terminal() {
       xtermRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (e: MediaQueryListEvent) => {
+      if (xtermRef.current) {
+        xtermRef.current.options.theme = e.matches ? DARK_THEME : LIGHT_THEME;
+      }
+    };
+    mql.addEventListener('change', handleThemeChange);
+    return () => {
+      mql.removeEventListener('change', handleThemeChange);
+    };
   }, []);
 
   useEffect(() => {
