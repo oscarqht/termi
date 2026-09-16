@@ -5,6 +5,24 @@ import '@xterm/xterm/css/xterm.css';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'exited' | 'error';
 
+const LAST_INITIAL_CMD_KEY = 'termi:lastInitialCmd';
+
+function loadLastInitialCmd(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_INITIAL_CMD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function rememberInitialCmd(cmd: string) {
+  try {
+    window.localStorage.setItem(LAST_INITIAL_CMD_KEY, cmd);
+  } catch {
+    // ignore quota/access errors
+  }
+}
+
 function paramsFromLocation() {
   const url = new URL(window.location.href);
   return {
@@ -24,7 +42,11 @@ export default function Terminal() {
   const initial = paramsFromLocation();
   const [cwd, setCwd] = useState(initial.cwd);
   const [cmds] = useState(initial.cmds);
-  const [cmd, setCmd] = useState(initial.cmds[0] ?? '');
+  const [cmd, setCmd] = useState(() => {
+    const lastChoice = loadLastInitialCmd();
+    if (lastChoice && initial.cmds.includes(lastChoice)) return lastChoice;
+    return initial.cmds[0] ?? '';
+  });
   const [phase, setPhase] = useState<Phase>(
     initial.session || initial.cmds.length === 0 ? 'connecting' : 'confirm',
   );
@@ -283,7 +305,10 @@ export default function Terminal() {
                   type="radio"
                   name="cmd-choice"
                   checked={cmd === c}
-                  onChange={() => setCmd(c)}
+                  onChange={() => {
+                    setCmd(c);
+                    rememberInitialCmd(c);
+                  }}
                 />
                 <code>{c}</code>
               </label>

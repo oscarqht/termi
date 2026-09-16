@@ -16,7 +16,7 @@ body {
 }
 
 .page {
-  max-width: 640px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 2rem 1.5rem;
 }
@@ -244,11 +244,30 @@ button.secondary:hover {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.session-info code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.session-info .cmd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .session-actions {
   display: flex;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 button.small {
