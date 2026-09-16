@@ -207,8 +207,8 @@ export default function Home() {
   }
 
 
-  async function resumeSession(id: string) {
-    window.open(`${window.location.origin}/term?session=${id}`, '_blank');
+  function resumeSession(id: string) {
+    window.location.href = `/term?session=${encodeURIComponent(id)}`;
   }
 
   async function closeSession(id: string) {
