@@ -53,6 +53,7 @@ export default function Home() {
   const [recentCmds, setRecentCmds] = useState<string[]>([]);
 
   useEffect(() => {
+    document.title = 'termi';
     setRecentCwds(loadRecent(RECENT_CWDS_KEY));
     setRecentCmds(loadRecent(RECENT_CMDS_KEY));
   }, []);
@@ -207,8 +208,11 @@ export default function Home() {
   }
 
 
-  function resumeSession(id: string) {
-    window.location.href = `/term?session=${encodeURIComponent(id)}`;
+  function resumeSession(id: string, cwd?: string) {
+    const params = new URLSearchParams();
+    params.set('session', id);
+    if (cwd) params.set('cwd', cwd);
+    window.location.href = `/term?${params.toString()}`;
   }
 
   async function closeSession(id: string) {
@@ -396,7 +400,7 @@ export default function Home() {
               {s.cmd && <span className="cmd"> — {s.cmd}</span>}
             </div>
             <div className="session-actions">
-              <button type="button" className="secondary small" onClick={() => resumeSession(s.id)}>Resume</button>
+              <button type="button" className="secondary small" onClick={() => resumeSession(s.id, s.cwd)}>Resume</button>
               <button type="button" className="danger small" onClick={() => closeSession(s.id)}>Close</button>
             </div>
           </li>

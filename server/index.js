@@ -125,6 +125,20 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && /^\/api\/sessions\/[^/]+$/.test(url.pathname)) {
+    const id = url.pathname.slice('/api/sessions/'.length);
+    const session = getSession(id);
+    if (!session) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Session not found' }));
+      return true;
+    }
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd }));
+    return true;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/default-cwd') {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ cwd: defaultCwd() }));

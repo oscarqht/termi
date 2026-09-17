@@ -96,9 +96,26 @@ function setSessionParam(id: string) {
   window.history.replaceState(null, '', url.toString());
 }
 
+export function getFolderName(dirPath: string): string {
+  const trimmed = dirPath.trim();
+  if (!trimmed) return '';
+  const stripped = trimmed.replace(/[/\\]+$/, '');
+  if (!stripped) return '/';
+  const parts = stripped.split(/[/\\]/);
+  return parts[parts.length - 1] || stripped;
+}
+
 export default function Terminal() {
   const initial = paramsFromLocation();
   const [cwd, setCwd] = useState(initial.cwd);
+
+  useEffect(() => {
+    const folderName = getFolderName(cwd);
+    document.title = folderName ? `termi > ${folderName}` : 'termi';
+    return () => {
+      document.title = 'termi';
+    };
+  }, [cwd]);
   const [cmds] = useState(initial.cmds);
   const [cmd, setCmd] = useState(() => {
     const lastChoice = loadLastInitialCmd();
@@ -258,6 +275,14 @@ export default function Terminal() {
 
   useEffect(() => {
     if (initial.session) {
+      fetch(`/api/sessions/${encodeURIComponent(initial.session)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.cwd) {
+            setCwd(data.cwd);
+          }
+        })
+        .catch(() => {});
       connect(initial.session);
     } else if (initial.cmds.length === 0) {
       startTerminal();
@@ -358,6 +383,9 @@ export default function Terminal() {
         setError(data.error ?? 'Failed to start terminal');
         setPhase('confirm');
         return;
+      }
+      if (data.cwd) {
+        setCwd(data.cwd);
       }
       setSessionParam(data.id);
       connect(data.id);
