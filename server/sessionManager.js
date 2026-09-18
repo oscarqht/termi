@@ -42,7 +42,12 @@ export function createSession({ cwd, cmd }) {
     buffer: '',
     clients: new Set(),
     uploadDir: path.join(os.tmpdir(), 'termi-uploads', id),
+    exited: false,
   };
+
+  term.on('error', (err) => {
+    console.warn(`[termi] pty error on session ${id}:`, err);
+  });
 
   term.onData((data) => {
     session.buffer += data;
@@ -51,16 +56,21 @@ export function createSession({ cwd, cmd }) {
     }
     for (const client of session.clients) {
       if (client.readyState === 1 /* OPEN */) {
-        client.send(JSON.stringify({ type: 'output', data }));
+        try {
+          client.send(JSON.stringify({ type: 'output', data }));
+        } catch {}
       }
     }
   });
 
   term.onExit(({ exitCode }) => {
+    session.exited = true;
     for (const client of session.clients) {
       if (client.readyState === 1 /* OPEN */) {
-        client.send(JSON.stringify({ type: 'exit', code: exitCode }));
-        client.close();
+        try {
+          client.send(JSON.stringify({ type: 'exit', code: exitCode }));
+          client.close();
+        } catch {}
       }
     }
     sessions.delete(id);
@@ -68,7 +78,9 @@ export function createSession({ cwd, cmd }) {
   });
 
   if (cmd && cmd.trim().length > 0) {
-    term.write(cmd + '\r');
+    try {
+      term.write(cmd + '\r');
+    } catch {}
   }
 
   sessions.set(id, session);
@@ -82,7 +94,9 @@ export function getSession(id) {
 export function attachClient(session, ws) {
   session.clients.add(ws);
   if (session.buffer) {
-    ws.send(JSON.stringify({ type: 'output', data: session.buffer }));
+    try {
+      ws.send(JSON.stringify({ type: 'output', data: session.buffer }));
+    } catch {}
   }
 }
 
@@ -91,13 +105,25 @@ export function detachClient(session, ws) {
 }
 
 export function resizeSession(session, cols, rows) {
-  if (cols > 0 && rows > 0) {
-    session.pty.resize(cols, rows);
+  if (!session || !session.pty || session.exited) return;
+  const c = Math.floor(cols);
+  const r = Math.floor(rows);
+  if (c > 0 && r > 0 && Number.isFinite(c) && Number.isFinite(r)) {
+    try {
+      session.pty.resize(c, r);
+    } catch {
+      // Ignore ioctl EBADF or similar errors when the pty is closed or exiting
+    }
   }
 }
 
 export function writeToSession(session, data) {
-  session.pty.write(data);
+  if (!session || !session.pty || session.exited) return;
+  try {
+    session.pty.write(data);
+  } catch {
+    // Ignore errors if the pty has exited
+  }
 }
 
 export function ensureUploadDir(session) {
@@ -112,7 +138,10 @@ export function defaultCwd() {
 export function killSession(id) {
   const session = sessions.get(id);
   if (session) {
-    session.pty.kill();
+    session.exited = true;
+    try {
+      session.pty.kill();
+    } catch {}
     sessions.delete(id);
   }
 }
@@ -120,7 +149,10 @@ export function killSession(id) {
 // Kill all sessions when server process die
 function killAll() {
   for (const session of sessions.values()) {
-    session.pty.kill();
+    session.exited = true;
+    try {
+      session.pty.kill();
+    } catch {}
   }
   sessions.clear();
 }

@@ -324,6 +324,11 @@ async function createServer() {
         ws.ping();
       }, PING_INTERVAL_MS);
 
+      ws.on('error', (err) => {
+        // Prevent unhandled error event from crashing the server
+        console.warn('[termi] WebSocket client error:', err.message);
+      });
+
       ws.on('message', (raw) => {
         let msg;
         try {
@@ -331,10 +336,14 @@ async function createServer() {
         } catch {
           return;
         }
-        if (msg.type === 'input') {
-          writeToSession(session, msg.data);
-        } else if (msg.type === 'resize') {
-          resizeSession(session, msg.cols, msg.rows);
+        try {
+          if (msg.type === 'input') {
+            writeToSession(session, msg.data);
+          } else if (msg.type === 'resize') {
+            resizeSession(session, msg.cols, msg.rows);
+          }
+        } catch (err) {
+          console.warn('[termi] Error handling message:', err.message);
         }
       });
 
