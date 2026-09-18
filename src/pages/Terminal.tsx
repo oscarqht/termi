@@ -3,6 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { getCommonCmdExplanationMap } from '../commonCmds';
+import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'exited' | 'error';
 
@@ -87,12 +88,15 @@ function paramsFromLocation() {
     cwd: url.searchParams.get('cwd') ?? '',
     cmds: url.searchParams.getAll('cmd').filter((c) => c.trim()),
     session: url.searchParams.get('session'),
+    start: url.searchParams.get('start') === '1',
   };
 }
 
 function setSessionParam(id: string) {
   const url = new URL(window.location.href);
   url.searchParams.set('session', id);
+  url.searchParams.delete('start');
+  url.searchParams.delete('cmd');
   window.history.replaceState(null, '', url.toString());
 }
 
@@ -123,7 +127,7 @@ export default function Terminal() {
     return initial.cmds[0] ?? '';
   });
   const [phase, setPhase] = useState<Phase>(
-    initial.session || initial.cmds.length === 0 ? 'connecting' : 'confirm',
+    initial.session || initial.cmds.length === 0 || initial.start ? 'connecting' : 'confirm',
   );
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -134,9 +138,125 @@ export default function Terminal() {
   const wsRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(initial.session);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+
+  const [isTouchDevice, setIsTouchDevice] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      window.matchMedia('(hover: none) and (pointer: coarse)').matches ||
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0
+    );
+  });
+  const [ctrlActive, setCtrlActiveState] = useState(false);
+  const [altActive, setAltActiveState] = useState(false);
+  const ctrlActiveRef = useRef(false);
+  const altActiveRef = useRef(false);
+  const [barCollapsed, setBarCollapsed] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [viewportTop, setViewportTop] = useState<number>(0);
+
+  const setCtrlActive = (updater: (prev: boolean) => boolean) => {
+    setCtrlActiveState((prev) => {
+      const next = updater(prev);
+      ctrlActiveRef.current = next;
+      return next;
+    });
+  };
+
+  const setAltActive = (updater: (prev: boolean) => boolean) => {
+    setAltActiveState((prev) => {
+      const next = updater(prev);
+      altActiveRef.current = next;
+      return next;
+    });
+  };
+
+  const handleSendKey = (data: string) => {
+    let processed = data;
+    if (ctrlActiveRef.current && processed.length === 1) {
+      const code = processed.toUpperCase().charCodeAt(0);
+      if (code >= 64 && code <= 95) {
+        processed = String.fromCharCode(code - 64);
+      }
+      ctrlActiveRef.current = false;
+      setCtrlActiveState(false);
+    }
+    if (altActiveRef.current) {
+      processed = '\x1b' + processed;
+      altActiveRef.current = false;
+      setAltActiveState(false);
+    }
+    sendInput(processed);
+  };
+
+  const toggleKeyboard = () => {
+    if (!xtermRef.current) return;
+    const textarea = containerRef.current?.querySelector('textarea');
+    if (document.activeElement === textarea) {
+      textarea?.blur();
+    } else {
+      xtermRef.current.focus();
+    }
+  };
+
+  useEffect(() => {
+    if (isTouchDevice) return;
+    const onTouch = () => {
+      setIsTouchDevice(true);
+    };
+    window.addEventListener('touchstart', onTouch, { passive: true, once: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouch);
+    };
+  }, [isTouchDevice]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const handleVisualViewport = () => {
+      setViewportHeight(vv.height);
+      setViewportTop(vv.offsetTop);
+      if (fitAddonRef.current && xtermRef.current) {
+        try {
+          fitAddonRef.current.fit();
+          const term = xtermRef.current;
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+          }
+        } catch {}
+      }
+    };
+
+    vv.addEventListener('resize', handleVisualViewport);
+    vv.addEventListener('scroll', handleVisualViewport);
+    handleVisualViewport();
+
+    return () => {
+      vv.removeEventListener('resize', handleVisualViewport);
+      vv.removeEventListener('scroll', handleVisualViewport);
+    };
+  }, [phase]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (xtermRef.current && fitAddonRef.current) {
+        try {
+          fitAddonRef.current.fit();
+          const term = xtermRef.current;
+          const ws = wsRef.current;
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+          }
+        } catch {}
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [barCollapsed]);
 
   function showToast(msg: string) {
     if (toastTimeoutRef.current) {
@@ -218,6 +338,7 @@ export default function Terminal() {
         theme: getSystemTheme(),
       });
       const fit = new FitAddon();
+      fitAddonRef.current = fit;
       term.loadAddon(fit);
       term.open(container);
       fit.fit();
@@ -234,9 +355,23 @@ export default function Terminal() {
       resizeObserverRef.current = resizeObserver;
 
       term.onData((data) => {
+        let processed = data;
+        if (ctrlActiveRef.current && processed.length === 1) {
+          const code = processed.toUpperCase().charCodeAt(0);
+          if (code >= 64 && code <= 95) {
+            processed = String.fromCharCode(code - 64);
+          }
+          ctrlActiveRef.current = false;
+          setCtrlActiveState(false);
+        }
+        if (altActiveRef.current) {
+          processed = '\x1b' + processed;
+          altActiveRef.current = false;
+          setAltActiveState(false);
+        }
         const ws = wsRef.current;
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data }));
+          ws.send(JSON.stringify({ type: 'input', data: processed }));
         }
       });
     }
@@ -284,14 +419,15 @@ export default function Terminal() {
         })
         .catch(() => {});
       connect(initial.session);
-    } else if (initial.cmds.length === 0) {
-      startTerminal();
+    } else if (initial.cmds.length === 0 || initial.start) {
+      startTerminal(initial.cwd, initial.start ? (initial.cmds[0] ?? '') : undefined);
     }
     return () => {
       wsRef.current?.close();
       wsRef.current = null;
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
+      fitAddonRef.current = null;
       xtermRef.current?.dispose();
       xtermRef.current = null;
       if (toastTimeoutRef.current) {
@@ -369,14 +505,16 @@ export default function Terminal() {
     if (files.length) uploadAndInsertFiles(files);
   }
 
-  async function startTerminal() {
+  async function startTerminal(targetCwd?: string, targetCmd?: string) {
+    const effectiveCwd = targetCwd !== undefined ? targetCwd : cwd;
+    const effectiveCmd = targetCmd !== undefined ? targetCmd : cmd;
     setError(null);
     setPhase('connecting');
     try {
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwd, cmd }),
+        body: JSON.stringify({ cwd: effectiveCwd, cmd: effectiveCmd }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -395,6 +533,16 @@ export default function Terminal() {
     }
   }
 
+  function startInNewTab() {
+    const params = new URLSearchParams();
+    if (cwd.trim()) params.set('cwd', cwd.trim());
+    if (cmd.trim()) {
+      params.set('cmd', cmd.trim());
+      rememberInitialCmd(cmd.trim());
+    }
+    params.set('start', '1');
+    window.open(`/term?${params.toString()}`, '_blank');
+  }
 
   async function handleClose() {
     if (sessionIdRef.current) {
@@ -416,17 +564,6 @@ export default function Terminal() {
           <dd>
             <code>{cwd || '(home directory)'}</code>
           </dd>
-          {cmds.length === 1 && (
-            <>
-              <dt>Initial command</dt>
-              <dd>
-                <code>{cmds[0]}</code>
-                {explanationMap[cmds[0]] && (
-                  <span className="cmd-explanation"> — {explanationMap[cmds[0]]}</span>
-                )}
-              </dd>
-            </>
-          )}
         </dl>
         {phase === 'error' && (
           <p className="error">This session is no longer running on the server.</p>
@@ -434,9 +571,18 @@ export default function Terminal() {
         {error && <p className="error">{error}</p>}
         <label className="confirm-cwd">
           Working directory
-          <input value={cwd} onChange={(e) => setCwd(e.target.value)} />
+          <input
+            value={cwd}
+            onChange={(e) => setCwd(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                startTerminal();
+              }
+            }}
+          />
         </label>
-        {cmds.length > 1 && (
+        {cmds.length > 0 && (
           <div className="cmd-choices">
             <span className="cmd-list-label">Choose an initial command</span>
             {cmds.map((c) => (
@@ -456,15 +602,46 @@ export default function Terminal() {
                 )}
               </label>
             ))}
+            <label className="cmd-choice">
+              <input
+                type="radio"
+                name="cmd-choice"
+                checked={cmd === ''}
+                onChange={() => {
+                  setCmd('');
+                }}
+              />
+              <span className="cmd-no-cmd">(no command)</span>
+            </label>
           </div>
         )}
-        <button onClick={startTerminal}>Start terminal</button>
+        <div className="form-actions">
+          <button type="button" onClick={() => startTerminal()}>
+            Start terminal
+          </button>
+          <button type="button" className="secondary" onClick={startInNewTab}>
+            Start in new tab
+          </button>
+        </div>
       </main>
     );
   }
 
-return (
-    <div className="terminal-page">
+  return (
+    <div
+      className="terminal-page"
+      style={
+        isTouchDevice && viewportHeight
+          ? {
+              height: `${viewportHeight}px`,
+              top: `${viewportTop}px`,
+              position: 'fixed',
+              left: 0,
+              right: 0,
+            }
+          : undefined
+      }
+    >
       <div className="floating-toolbar">
         {phase === 'connected' && (
           <button
@@ -534,6 +711,18 @@ return (
         ref={containerRef}
         className={`xterm-container${dragActive ? ' drag-active' : ''}`}
       />
+      {phase === 'connected' && isTouchDevice && (
+        <MobileAccessoryBar
+          onSendKey={handleSendKey}
+          ctrlActive={ctrlActive}
+          setCtrlActive={setCtrlActive}
+          altActive={altActive}
+          setAltActive={setAltActive}
+          onToggleKeyboard={toggleKeyboard}
+          collapsed={barCollapsed}
+          setCollapsed={setBarCollapsed}
+        />
+      )}
     </div>
   );
 }
