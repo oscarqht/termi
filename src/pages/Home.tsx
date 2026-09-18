@@ -10,6 +10,7 @@ type SessionInfo = {
   id: string;
   cwd: string;
   cmd: string;
+  title?: string;
   createdAt: number;
   connected: boolean;
 };
@@ -396,7 +397,14 @@ export default function Home() {
 <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
             <div className="session-info">
               <span className="dot" />
-              <code>{s.cwd}</code>
+              {s.title ? (
+                <>
+                  <span className="session-title">{s.title}</span>
+                  <code className="session-cwd">{s.cwd}</code>
+                </>
+              ) : (
+                <code>{s.cwd}</code>
+              )}
               {s.cmd && <span className="cmd"> — {s.cmd}</span>}
             </div>
             <div className="session-actions">

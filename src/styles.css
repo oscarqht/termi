@@ -259,6 +259,15 @@ button.secondary:hover {
   color: var(--text-secondary);
 }
 
+.session-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.session-cwd {
+  opacity: 0.85;
+}
+
 .muted {
   color: var(--text-muted);
 }
@@ -473,6 +482,126 @@ button.danger:hover {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: modal-fade-in 0.15s ease-out;
+}
+
+.modal-dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  animation: modal-scale-in 0.15s ease-out;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.modal-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.modal-close-btn:hover {
+  background: var(--toolbar-btn-hover);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 1.25rem;
+}
+
+.modal-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.modal-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  transition: border-color 0.15s;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--btn-primary-bg);
+}
+
+.modal-help-text {
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
 }
 
 .common-cmds-section {

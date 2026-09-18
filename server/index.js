@@ -18,6 +18,7 @@ import {
   defaultCwd,
   killSession,
   ensureUploadDir,
+  updateSessionTitle,
 } from './sessionManager.js';
 
 // Cap a single uploaded file at 100MB.
@@ -135,7 +136,36 @@ async function handleApi(req, res, url) {
       return true;
     }
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd }));
+    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd, title: session.title || '' }));
+    return true;
+  }
+
+  if (req.method === 'PATCH' && /^\/api\/sessions\/[^/]+$/.test(url.pathname)) {
+    const id = url.pathname.slice('/api/sessions/'.length);
+    const session = getSession(id);
+    if (!session) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Session not found' }));
+      return true;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return true;
+    }
+
+    if (typeof body.title === 'string') {
+      updateSessionTitle(id, body.title);
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd, title: session.title || '' }));
     return true;
   }
 
@@ -194,9 +224,10 @@ async function handleApi(req, res, url) {
     }
 
     const cmd = typeof body.cmd === 'string' ? body.cmd : '';
-    const session = createSession({ cwd: resolvedCwd, cmd });
+    const title = typeof body.title === 'string' ? body.title : '';
+    const session = createSession({ cwd: resolvedCwd, cmd, title });
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd }));
+    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd, title: session.title || '' }));
     return true;
   }
 

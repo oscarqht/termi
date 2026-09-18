@@ -112,14 +112,22 @@ export function getFolderName(dirPath: string): string {
 export default function Terminal() {
   const initial = paramsFromLocation();
   const [cwd, setCwd] = useState(initial.cwd);
+  const [sessionTitle, setSessionTitle] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
-    const folderName = getFolderName(cwd);
-    document.title = folderName ? `termi > ${folderName}` : 'termi';
+    if (sessionTitle.trim()) {
+      document.title = sessionTitle.trim();
+    } else {
+      const folderName = getFolderName(cwd);
+      document.title = folderName ? `termi > ${folderName}` : 'termi';
+    }
     return () => {
       document.title = 'termi';
     };
-  }, [cwd]);
+  }, [cwd, sessionTitle]);
   const [cmds] = useState(initial.cmds);
   const [cmd, setCmd] = useState(() => {
     const lastChoice = loadLastInitialCmd();
@@ -416,6 +424,9 @@ export default function Terminal() {
           if (data?.cwd) {
             setCwd(data.cwd);
           }
+          if (data?.title) {
+            setSessionTitle(data.title);
+          }
         })
         .catch(() => {});
       connect(initial.session);
@@ -525,6 +536,9 @@ export default function Terminal() {
       if (data.cwd) {
         setCwd(data.cwd);
       }
+      if (data.title) {
+        setSessionTitle(data.title);
+      }
       setSessionParam(data.id);
       connect(data.id);
     } catch (err) {
@@ -542,6 +556,40 @@ export default function Terminal() {
     }
     params.set('start', '1');
     window.open(`/term?${params.toString()}`, '_blank');
+  }
+
+  function handleOpenSettings() {
+    setDraftTitle(sessionTitle);
+    setSettingsOpen(true);
+  }
+
+  function handleCloseSettings() {
+    setSettingsOpen(false);
+  }
+
+  async function handleSaveSettings(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!sessionIdRef.current) return;
+    setSavingSettings(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionIdRef.current}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draftTitle.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSessionTitle(data.title ?? draftTitle.trim());
+        setSettingsOpen(false);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.error || 'Failed to update settings');
+      }
+    } catch {
+      showToast('Failed to update settings');
+    } finally {
+      setSavingSettings(false);
+    }
   }
 
   async function handleClose() {
@@ -678,6 +726,29 @@ export default function Terminal() {
             )}
           </button>
         )}
+        {phase === 'connected' && (
+          <button
+            className="icon-button"
+            onClick={handleOpenSettings}
+            title="Session settings"
+            aria-label="Session settings"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
+        )}
         <button
           className="icon-button danger"
           onClick={handleClose}
@@ -694,6 +765,69 @@ export default function Terminal() {
           </svg>
         </button>
       </div>
+      {settingsOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseSettings();
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') handleCloseSettings();
+          }}
+        >
+          <div
+            className="modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-dialog-title"
+          >
+            <div className="modal-header">
+              <h2 id="settings-dialog-title">Session settings</h2>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={handleCloseSettings}
+                aria-label="Close settings dialog"
+              >
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleSaveSettings}>
+              <div className="modal-body">
+                <label className="modal-label" htmlFor="page-title-input">
+                  Page title
+                  <input
+                    id="page-title-input"
+                    type="text"
+                    className="modal-input"
+                    placeholder="e.g. Frontend Dev (leave blank for default)"
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    autoFocus
+                  />
+                </label>
+                <p className="modal-help-text">
+                  Sets the browser tab title. Blank defaults to <code>termi &gt; &#123;folder&#125;</code>.
+                </p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={handleCloseSettings}
+                  disabled={savingSettings}
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingSettings}>
+                  {savingSettings ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {toastError && (
         <div className="terminal-toast-error" role="alert">
           {toastError}

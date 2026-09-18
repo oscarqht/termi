@@ -18,12 +18,13 @@ export function listSessions() {
     id: s.id,
     cwd: s.cwd,
     cmd: s.cmd,
+    title: s.title || '',
     createdAt: s.createdAt,
     connected: s.clients.size > 0,
   }));
 }
 
-export function createSession({ cwd, cmd }) {
+export function createSession({ cwd, cmd, title }) {
   const id = crypto.randomUUID();
   const term = pty.spawn(shell(), ['-l'], {
     name: 'xterm-256color',
@@ -37,6 +38,7 @@ export function createSession({ cwd, cmd }) {
     id,
     cwd,
     cmd,
+    title: typeof title === 'string' ? title.trim() : '',
     createdAt: Date.now(),
     pty: term,
     buffer: '',
@@ -89,6 +91,13 @@ export function createSession({ cwd, cmd }) {
 
 export function getSession(id) {
   return sessions.get(id);
+}
+
+export function updateSessionTitle(id, title) {
+  const session = sessions.get(id);
+  if (!session) return null;
+  session.title = typeof title === 'string' ? title.trim() : '';
+  return session;
 }
 
 export function attachClient(session, ws) {
