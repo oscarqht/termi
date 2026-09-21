@@ -6,6 +6,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "tauri": "tauri",
     "dev": "vite",
     "build": "vite build",
     "server:dev": "node server/index.js",

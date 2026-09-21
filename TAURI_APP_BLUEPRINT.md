@@ -318,6 +318,9 @@ jobs:
           releaseBody: 'See assets below to install Termi.'
           releaseDraft: true
           prerelease: false
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
+          updaterJsonPreferNsis: true
 
   publish:
     name: Publish Release
