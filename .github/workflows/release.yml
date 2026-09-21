@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -81,6 +81,8 @@ jobs:
 
       - name: Build application
         run: ${{ matrix.build_cmd }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -113,6 +115,8 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: Termi ${{ needs.prepare.outputs.tag }}
