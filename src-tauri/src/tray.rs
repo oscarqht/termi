@@ -67,6 +67,14 @@ pub fn setup_tray<R: Runtime>(
         true,
         None::<&str>,
     )?;
+    let version_text = format!("Version {}", app.package_info().version);
+    let version_item = MenuItem::with_id(
+        app,
+        "version",
+        &version_text,
+        false,
+        None::<&str>,
+    )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit Termi", true, None::<&str>)?;
 
@@ -78,6 +86,7 @@ pub fn setup_tray<R: Runtime>(
             &sep1,
             &autostart_item,
             &check_updates_item,
+            &version_item,
             &sep2,
             &quit_item,
         ],

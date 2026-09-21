@@ -203,6 +203,36 @@ impl SessionManager {
             cmd_builder.env(k, v);
         }
 
+        // Configure terminal emulation and color capabilities for the PTY session.
+        // GUI apps (Tauri/Electron) do not inherit terminal environment variables from
+        // an interactive shell, which causes CLI tools (e.g. agy, chalk, ls) to fall
+        // back to monochrome / no-color mode.
+        cmd_builder.env("TERM", "xterm-256color");
+        cmd_builder.env("COLORTERM", "truecolor");
+        cmd_builder.env("TERM_PROGRAM", "Termi");
+        cmd_builder.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+
+        // Ensure UTF-8 locale so CLI tools render unicode block graphics and characters
+        if std::env::var("LANG").map(|l| l.is_empty() || l == "C" || l == "POSIX").unwrap_or(true) {
+            cmd_builder.env("LANG", "en_US.UTF-8");
+        }
+        if std::env::var("LC_ALL").map(|l| l == "C" || l == "POSIX").unwrap_or(false) {
+            cmd_builder.env("LC_ALL", "en_US.UTF-8");
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let mut paths: Vec<String> = current_path.split(':').map(|s| s.to_string()).collect();
+            let standard_paths = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"];
+            for p in standard_paths {
+                if !paths.iter().any(|existing| existing == p) && std::path::Path::new(p).exists() {
+                    paths.insert(0, p.to_string());
+                }
+            }
+            cmd_builder.env("PATH", paths.join(":"));
+        }
+
         let mut child = pair
             .slave
             .spawn_command(cmd_builder)
@@ -259,21 +289,48 @@ impl SessionManager {
         let tx_for_read = tx.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut pending_bytes = Vec::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        {
-                            let mut b = session_for_read.buffer.blocking_write();
-                            b.write(text.clone());
+                        let mut combined = if pending_bytes.is_empty() {
+                            buf[..n].to_vec()
+                        } else {
+                            let mut v = std::mem::take(&mut pending_bytes);
+                            v.extend_from_slice(&buf[..n]);
+                            v
+                        };
+
+                        let valid_up_to = match std::str::from_utf8(&combined) {
+                            Ok(_) => combined.len(),
+                            Err(e) => {
+                                if e.error_len().is_none() {
+                                    // Incomplete multi-byte sequence at buffer boundary
+                                    e.valid_up_to()
+                                } else {
+                                    combined.len()
+                                }
+                            }
+                        };
+
+                        if valid_up_to < combined.len() {
+                            pending_bytes = combined.split_off(valid_up_to);
                         }
-                        let msg = serde_json::json!({
-                            "type": "output",
-                            "data": text
-                        })
-                        .to_string();
-                        let _ = tx_for_read.send(msg);
+
+                        let text = String::from_utf8_lossy(&combined).to_string();
+                        if !text.is_empty() {
+                            {
+                                let mut b = session_for_read.buffer.blocking_write();
+                                b.write(text.clone());
+                            }
+                            let msg = serde_json::json!({
+                                "type": "output",
+                                "data": text
+                            })
+                            .to_string();
+                            let _ = tx_for_read.send(msg);
+                        }
                     }
                     Err(_) => break,
                 }

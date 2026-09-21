@@ -67,12 +67,21 @@ export function listSessions() {
 export function createSession({ cwd, cmd, title }) {
   const id = crypto.randomUUID();
   const isWin = process.platform === 'win32';
+  const termEnv = {
+    ...process.env,
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    TERM_PROGRAM: 'Termi',
+  };
+  if (!termEnv.LANG || termEnv.LANG === 'C' || termEnv.LANG === 'POSIX') {
+    termEnv.LANG = 'en_US.UTF-8';
+  }
   const term = pty.spawn(shell(), isWin ? [] : ['-l'], {
     name: 'xterm-256color',
     cols: 80,
     rows: 24,
     cwd,
-    env: process.env,
+    env: termEnv,
   });
 
   const session = {

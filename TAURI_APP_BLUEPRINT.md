@@ -138,7 +138,7 @@ let pair = pty_system.openpty(PtySize {
 })?;
 
 #[cfg(target_os = "windows")]
-let cmd = CommandBuilder::new("powershell.exe");
+let mut cmd = CommandBuilder::new("powershell.exe");
 #[cfg(target_os = "macos")]
 let mut cmd = CommandBuilder::new("/bin/zsh");
 #[cfg(target_os = "macos")]
@@ -148,10 +148,16 @@ let mut cmd = CommandBuilder::new("/bin/bash");
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 cmd.arg("-l");
 
+// Configure terminal emulation and color capabilities (crucial for GUI apps)
+cmd.env("TERM", "xterm-256color");
+cmd.env("COLORTERM", "truecolor");
+cmd.env("TERM_PROGRAM", "Termi");
+cmd.env("LANG", "en_US.UTF-8");
+
 let child = pair.slave.spawn_command(cmd)?;
 ```
 - **PTY Writer**: Uses an async Tokio unbounded channel worker thread to safely send keyboard input to `Box<dyn Write + Send>` without blocking the async runtime.
-- **PTY Reader**: Dedicated OS thread reads raw terminal bytes into an in-memory 1,000,000-character circular buffer and broadcasts updates to connected WebSockets via `tokio::sync::broadcast`.
+- **PTY Reader**: Dedicated OS thread reads raw terminal bytes with multi-byte UTF-8 chunk boundary preservation into an in-memory 1,000,000-character circular buffer and broadcasts updates to connected WebSockets via `tokio::sync::broadcast`.
 
 ### C. Headless macOS Configuration (No Dock Icon, No Cmd+Tab)
 To keep the app completely in the menu bar:
