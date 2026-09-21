@@ -1,6 +1,7 @@
 import { app, Tray, Menu, shell, clipboard, dialog, nativeImage, Notification } from 'electron';
 import path from 'node:path';
 import { startServer } from '../server/index.js';
+import { initUpdater, checkForUpdates, quitAndInstall, getUpdateState } from './updater.js';
 
 // Prevent multiple instances
 const gotLock = app.requestSingleInstanceLock();
@@ -20,8 +21,32 @@ let serverUrl = '';
 
 function buildContextMenu() {
   const isLoginItem = app.getLoginItemSettings().openAtLogin;
+  const updateState = getUpdateState();
 
-  return Menu.buildFromTemplate([
+  const items = [];
+
+  // Update action banner if downloaded and ready
+  if (updateState.status === 'ready') {
+    items.push({
+      label: `🔄 Restart to Install Update (v${updateState.version})`,
+      click: () => quitAndInstall(),
+    });
+    items.push({ type: 'separator' });
+  } else if (updateState.status === 'downloading') {
+    items.push({
+      label: `⏳ Downloading update (${updateState.progress}%)...`,
+      enabled: false,
+    });
+    items.push({ type: 'separator' });
+  } else if (updateState.status === 'checking') {
+    items.push({
+      label: '⏳ Checking for updates...',
+      enabled: false,
+    });
+    items.push({ type: 'separator' });
+  }
+
+  items.push(
     {
       label: 'Open in Browser',
       click: () => {
@@ -51,12 +76,19 @@ function buildContextMenu() {
     },
     { type: 'separator' },
     {
+      label: 'Check for Updates...',
+      click: () => checkForUpdates(true),
+    },
+    { type: 'separator' },
+    {
       label: 'Quit Termi',
       click: () => {
         app.quit();
       },
-    },
-  ]);
+    }
+  );
+
+  return Menu.buildFromTemplate(items);
 }
 
 async function chooseFolderDialog() {
@@ -107,6 +139,11 @@ app.whenReady().then(async () => {
     };
 
     updateMenu();
+
+    // Initialize auto-updater
+    initUpdater({
+      onMenuUpdate: updateMenu,
+    });
 
     tray.on('click', () => {
       if (serverUrl) shell.openExternal(serverUrl);

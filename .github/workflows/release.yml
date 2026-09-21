@@ -92,6 +92,8 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.exe
+            dist/*.blockmap
+            dist/latest*.yml
           if-no-files-found: error
 
   publish:
@@ -127,3 +129,5 @@ jobs:
             release_artifacts/*.dmg
             release_artifacts/*.zip
             release_artifacts/*.exe
+            release_artifacts/*.blockmap
+            release_artifacts/latest*.yml

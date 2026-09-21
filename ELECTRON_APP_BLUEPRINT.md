@@ -13,7 +13,8 @@ This document serves as a complete, reusable blueprint for converting any Node.j
 5. [Step 4: Handling Native C++ Modules & Prebuilds](#step-4-handling-native-c-modules--prebuilds)
 6. [Step 5: Packaging Configuration (`electron-builder`)](#step-5-packaging-configuration-electron-builder)
 7. [Step 6: Automated GitHub Actions CI/CD Pipeline](#step-6-automated-github-actions-cicd-pipeline)
-8. [Critical Gotchas & Troubleshooting Guide](#critical-gotchas--troubleshooting-guide)
+8. [Step 7: Auto-Update Architecture & Implementation (`electron-updater`)](#step-7-auto-update-architecture--implementation-electron-updater)
+9. [Critical Gotchas & Troubleshooting Guide](#critical-gotchas--troubleshooting-guide)
 
 ---
 
@@ -593,11 +594,218 @@ jobs:
             release_artifacts/*.dmg
             release_artifacts/*.zip
             release_artifacts/*.exe
+            release_artifacts/*.blockmap
+            release_artifacts/latest*.yml
 ```
 
 ---
 
-## 8. Critical Gotchas & Troubleshooting Guide
+## 8. Step 7: Auto-Update Architecture & Implementation (`electron-updater`)
+
+`electron-updater` (from the creators of `electron-builder`) provides background auto-updates directly backed by GitHub Releases without requiring an external update server.
+
+### How It Works
+
+1. **Manifest Discovery**: When checking for updates, `electron-updater` requests `latest-mac.yml` (on macOS) or `latest.yml` (on Windows) from your GitHub repository releases:
+   `https://github.com/<owner>/<repo>/releases/latest/download/latest.yml`
+2. **Comparison**: It compares the `version` in the manifest against `app.getVersion()`.
+3. **Background Download**: If a newer version exists, it streams the update package (or diff blockmap) in the background.
+4. **Install & Relaunch**: `autoUpdater.quitAndInstall()` swaps the application and relaunches.
+
+---
+
+### Configuration in `package.json`
+
+Add the `publish` field under `build`:
+
+```json
+{
+  "build": {
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YOUR_GITHUB_USERNAME",
+        "repo": "YOUR_REPOSITORY_NAME"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Implementation: Dedicated Updater Module (`electron/updater.js`)
+
+```javascript
+import { app, Notification, shell } from 'electron';
+import electronUpdater from 'electron-updater';
+
+const { autoUpdater } = electronUpdater;
+const GITHUB_RELEASES_URL = 'https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME/releases/latest';
+
+let onMenuUpdateCallback = () => {};
+let isManualCheck = false;
+
+const updateState = {
+  status: 'idle', // 'idle' | 'checking' | 'downloading' | 'ready' | 'error'
+  version: null,
+  progress: 0,
+  error: null,
+};
+
+function showNotification(title, body, onClick = null) {
+  if (!Notification.isSupported()) return;
+  const notif = new Notification({ title, body, silent: false });
+  if (onClick) notif.on('click', onClick);
+  notif.show();
+}
+
+export function getUpdateState() {
+  return { ...updateState };
+}
+
+export function checkForUpdates(manual = false) {
+  isManualCheck = manual;
+  if (!app.isPackaged) {
+    if (manual) showNotification('Development Mode', 'Running in dev mode; updates disabled.');
+    return;
+  }
+
+  updateState.status = 'checking';
+  updateState.error = null;
+  onMenuUpdateCallback();
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[Updater] checkForUpdates error:', err.message);
+  });
+}
+
+export function quitAndInstall() {
+  if (updateState.status === 'ready') {
+    autoUpdater.quitAndInstall();
+  }
+}
+
+export function initUpdater(options = {}) {
+  if (options.onMenuUpdate) onMenuUpdateCallback = options.onMenuUpdate;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    updateState.status = 'checking';
+    onMenuUpdateCallback();
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    updateState.status = 'downloading';
+    updateState.version = info.version;
+    updateState.progress = 0;
+    onMenuUpdateCallback();
+    showNotification('Update Found', `Downloading v${info.version} in background...`);
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    updateState.status = 'idle';
+    onMenuUpdateCallback();
+    if (isManualCheck) {
+      showNotification('Up to Date', `You are running the latest version (v${app.getVersion()}).`);
+      isManualCheck = false;
+    }
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    updateState.status = 'downloading';
+    updateState.progress = Math.round(progressObj.percent || 0);
+    onMenuUpdateCallback();
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateState.status = 'ready';
+    updateState.version = info.version;
+    onMenuUpdateCallback();
+    showNotification(
+      'Update Ready',
+      `Version v${info.version} downloaded. Click to restart and install.`,
+      () => quitAndInstall()
+    );
+  });
+
+  autoUpdater.on('error', (err) => {
+    const errMsg = err?.message || String(err);
+    updateState.status = 'error';
+    updateState.error = errMsg;
+    onMenuUpdateCallback();
+
+    // Graceful fallback on macOS for unsigned / ad-hoc signature restrictions
+    if (process.platform === 'darwin' && errMsg.toLowerCase().includes('code signature')) {
+      showNotification('Update Available', 'A new release is available on GitHub. Click to download.', () => {
+        shell.openExternal(GITHUB_RELEASES_URL);
+      });
+      return;
+    }
+
+    if (isManualCheck) {
+      showNotification('Update Check Error', errMsg);
+      isManualCheck = false;
+    }
+  });
+
+  if (app.isPackaged) {
+    setTimeout(() => checkForUpdates(false), 5000); // 5s after startup
+    setInterval(() => checkForUpdates(false), 4 * 60 * 60 * 1000); // every 4 hours
+  }
+}
+```
+
+---
+
+### Wiring into Tray Menu (`electron/main.js`)
+
+In `buildContextMenu()`:
+```javascript
+  const updateState = getUpdateState();
+  const items = [];
+
+  if (updateState.status === 'ready') {
+    items.push({
+      label: `🔄 Restart to Install Update (v${updateState.version})`,
+      click: () => quitAndInstall(),
+    });
+    items.push({ type: 'separator' });
+  } else if (updateState.status === 'downloading') {
+    items.push({
+      label: `⏳ Downloading update (${updateState.progress}%)...`,
+      enabled: false,
+    });
+    items.push({ type: 'separator' });
+  }
+
+  // ... standard menu items ...
+
+  items.push(
+    {
+      label: 'Check for Updates...',
+      click: () => checkForUpdates(true),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => app.quit(),
+    }
+  );
+```
+
+When app is ready:
+```javascript
+  initUpdater({
+    onMenuUpdate: () => tray.setContextMenu(buildContextMenu()),
+  });
+```
+
+---
+
+## 9. Critical Gotchas & Troubleshooting Guide
 
 ### ⚠️ Gotcha 1: `electron-builder` Fails in CI with `GitHub Personal Access Token is not set`
 - **Symptom**: `⨯ GitHub Personal Access Token is not set, neither programmatically, nor using env "GH_TOKEN"`
@@ -647,3 +855,13 @@ jobs:
   ```json
   "postinstall": "node -e \"if (process.platform !== 'win32') { try { require('child_process').execSync('chmod +x ...'); } catch(e){} }\""
   ```
+
+### ⚠️ Gotcha 6: `electron-updater` Silently Fails Without `latest*.yml` Manifests
+- **Symptom**: `checkForUpdates()` says no updates found even after publishing a newer release on GitHub.
+- **Why**: `electron-updater` doesn't inspect `.dmg` or `.exe` filenames; it queries `latest.yml` (Windows) and `latest-mac.yml` (macOS) in the release assets. If those files or `*.blockmap` files are not uploaded, auto-update discovery fails.
+- **Fix**: Include `dist/latest*.yml` and `dist/*.blockmap` in GitHub Actions release asset uploads.
+
+### ⚠️ Gotcha 7: macOS Squirrel.Mac Signature Verification Block
+- **Symptom**: On macOS without a paid Apple Developer certificate, `update-downloaded` fails or in-place binary swap is rejected with `Code signature verification failed`.
+- **Why**: Electron's built-in macOS update framework (Squirrel.Mac) requires Apple-trusted code signatures to swap bundles in `/Applications/`.
+- **Fix**: Implement a graceful fallback in `autoUpdater.on('error')` that detects signature errors and provides a clickable desktop notification opening the latest GitHub Release page directly.

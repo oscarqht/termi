@@ -21,6 +21,7 @@
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "electron-updater": "^6.8.9",
     "node-pty": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -41,6 +42,13 @@
   "build": {
     "appId": "com.termi.app",
     "productName": "Termi",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "oscarqht",
+        "repo": "termi"
+      }
+    ],
     "afterPack": "scripts/after-pack.js",
     "mac": {
       "category": "public.app-category.developer-tools",
