@@ -438,6 +438,7 @@ button.danger:hover {
   right: 1rem;
   z-index: 100;
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   background: var(--toolbar-bg);
   padding: 0.35rem;
@@ -445,6 +446,46 @@ button.danger:hover {
   backdrop-filter: blur(6px);
   border: 1px solid var(--border-subtle);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.toolbar-session-title {
+  display: inline-flex;
+  align-items: center;
+  height: 2rem;
+  padding: 0 0.55rem 0 0.75rem;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--toolbar-btn-color);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 999px;
+  cursor: pointer;
+  max-width: 240px;
+  min-width: 0;
+  align-self: center;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.toolbar-session-title:hover:not(:disabled) {
+  background: var(--toolbar-btn-bg);
+}
+
+.toolbar-session-title:focus-visible {
+  outline: 2px solid var(--btn-primary-bg);
+  outline-offset: -1px;
+}
+
+.toolbar-session-title:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.toolbar-session-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-button {
@@ -964,5 +1005,12 @@ button.common-cmd-remove-btn:hover {
   .icon-button svg {
     width: 16px;
     height: 16px;
+  }
+
+  .toolbar-session-title {
+    height: 1.85rem;
+    font-size: 0.78rem;
+    max-width: 110px;
+    padding: 0 0.35rem 0 0.5rem;
   }
 }

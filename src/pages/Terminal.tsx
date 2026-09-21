@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
+import type { SessionInfo } from './Home';
+import { isSameCwd, normalizePath } from '../pathUtils';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'exited' | 'error';
 
@@ -112,6 +114,7 @@ export function getFolderName(dirPath: string): string {
   return parts[parts.length - 1] || stripped;
 }
 
+
 export default function Terminal() {
   const initial = paramsFromLocation();
   const [cwd, setCwd] = useState(initial.cwd);
@@ -119,6 +122,7 @@ export default function Terminal() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
+  const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
 
   useEffect(() => {
     if (sessionTitle.trim()) {
@@ -153,6 +157,70 @@ export default function Terminal() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+
+  const [defaultCwd, setDefaultCwd] = useState('');
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+
+  useEffect(() => {
+    fetch('/api/default-cwd')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.cwd) setDefaultCwd(d.cwd);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'confirm' && phase !== 'error') return;
+
+    const refresh = () => {
+      fetch('/api/sessions')
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) setSessions(data);
+        })
+        .catch(() => {});
+    };
+
+    refresh();
+    const id = setInterval(refresh, 3000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', refresh);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [phase]);
+
+  const matchingSessions = useMemo(() => {
+    return sessions.filter((s) => isSameCwd(s.cwd, cwd, defaultCwd));
+  }, [sessions, cwd, defaultCwd]);
+
+  function resumeSession(id: string, sessionCwd?: string) {
+    const params = new URLSearchParams();
+    params.set('session', id);
+    if (sessionCwd) params.set('cwd', sessionCwd);
+    window.location.href = `/term?${params.toString()}`;
+  }
+
+  async function closeSession(id: string) {
+    try {
+      const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+      } else {
+        alert('Failed to close session');
+      }
+    } catch {
+      alert('Failed to close session');
+    }
+  }
 
   const phaseRef = useRef<Phase>(phase);
   phaseRef.current = phase;
@@ -849,7 +917,58 @@ export default function Terminal() {
           <button type="button" className="secondary" onClick={startInNewTab}>
             Start in new tab
           </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              window.location.href = '/';
+            }}
+          >
+            Home
+          </button>
         </div>
+
+        <section className="confirm-ongoing-sessions" style={{ marginTop: '2.5rem' }}>
+          <h2>On-going sessions in this directory</h2>
+          {matchingSessions.length === 0 ? (
+            <p className="muted">No on-going sessions in this directory.</p>
+          ) : (
+            <ul className="session-list">
+              {matchingSessions.map((s) => (
+                <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
+                  <div className="session-info">
+                    <span className="dot" />
+                    {s.title ? (
+                      <>
+                        <span className="session-title">{s.title}</span>
+                        <code className="session-cwd">{s.cwd}</code>
+                      </>
+                    ) : (
+                      <code>{s.cwd}</code>
+                    )}
+                    {s.cmd && <span className="cmd"> — {s.cmd}</span>}
+                  </div>
+                  <div className="session-actions">
+                    <button
+                      type="button"
+                      className="secondary small"
+                      onClick={() => resumeSession(s.id, s.cwd)}
+                    >
+                      Resume
+                    </button>
+                    <button
+                      type="button"
+                      className="danger small"
+                      onClick={() => closeSession(s.id)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </main>
     );
   }
@@ -870,6 +989,16 @@ export default function Terminal() {
       }
     >
       <div className="floating-toolbar">
+        <button
+          type="button"
+          className="toolbar-session-title"
+          onClick={phase === 'connected' ? handleOpenSettings : undefined}
+          title={phase === 'connected' ? `${currentTitle} (click to edit)` : currentTitle}
+          aria-label={`Session: ${currentTitle}`}
+          disabled={phase !== 'connected'}
+        >
+          <span className="toolbar-session-title-text">{currentTitle}</span>
+        </button>
         {phase === 'connected' && (
           <button
             className="icon-button"

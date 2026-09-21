@@ -6,7 +6,7 @@ import {
   saveCommonCmds,
 } from '../commonCmds';
 
-type SessionInfo = {
+export type SessionInfo = {
   id: string;
   cwd: string;
   cmd: string;
