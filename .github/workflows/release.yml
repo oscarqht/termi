@@ -59,9 +59,14 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            targets: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            targets: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
           - platform: windows-latest
             targets: ''
+            args: ''
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
@@ -106,6 +111,7 @@ jobs:
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
           updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}
 
   publish:
     name: Publish Release

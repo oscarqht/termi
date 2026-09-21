@@ -286,9 +286,14 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            targets: aarch64-apple-darwin,x86_64-apple-darwin
+            targets: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            targets: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
           - platform: windows-latest
             targets: ''
+            args: ''
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -321,6 +326,7 @@ jobs:
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
           updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}
 
   publish:
     name: Publish Release
@@ -366,3 +372,27 @@ Follow these steps to convert any existing Web/Electron project to this architec
    Add public key to `tauri.conf.json` and private key to GitHub Repository Secrets as `TAURI_SIGNING_PRIVATE_KEY`.
 7. **Set up GitHub Actions**:
    Drop in `.github/workflows/release.yml` and `scripts/bump-version.js`.
+
+---
+
+## 8. Common Pitfalls & Solutions
+
+### ⚠️ macOS Gatekeeper: "App is damaged and can't be opened. You should move it to the Bin."
+- **Root Cause**: When an app is built without `"signingIdentity": "-"` in `tauri.conf.json`, `codesign` produces an invalid signature state (`code has no resources but signature indicates they must be present`). Gatekeeper treats this signature mismatch as a corrupted/damaged binary.
+- **The Fix in Repository**:
+  In `src-tauri/tauri.conf.json`, explicitly specify ad-hoc signing:
+  ```json
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+  ```
+- **How End Users Open Unsigned Apps**:
+  For apps distributed without an Apple Developer ID ($99/year), macOS quarantine requires approval:
+  - **Option 1**: Go to **System Settings > Privacy & Security**, scroll to Security, and click **"Open Anyway"**.
+  - **Option 2**: Control-click (or right-click) the app in Finder and choose **Open**.
+  - **Option 3**: In Terminal, clear the quarantine attribute:
+    ```bash
+    xattr -cr /Applications/Termi.app
+    ```
