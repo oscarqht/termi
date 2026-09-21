@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
 
-type Phase = 'confirm' | 'connecting' | 'connected' | 'exited' | 'error';
+type Phase = 'confirm' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'exited' | 'error';
 
 const LIGHT_THEME = {
   background: '#ffffff',
@@ -63,6 +63,9 @@ function getSystemTheme() {
   }
   return DARK_THEME;
 }
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BACKOFF_DELAYS = [1000, 2000, 3000, 5000, 8000];
 
 const LAST_INITIAL_CMD_KEY = 'termi:lastInitialCmd';
 
@@ -150,6 +153,15 @@ export default function Terminal() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+
+  const phaseRef = useRef<Phase>(phase);
+  phaseRef.current = phase;
+
+  const isExplicitExitRef = useRef(false);
+  const hasConnectedOnceRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const isUnmountedRef = useRef(false);
 
   const [isTouchDevice, setIsTouchDevice] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -282,6 +294,7 @@ export default function Terminal() {
   }
 
   function sendInput(data: string) {
+    if (phaseRef.current !== 'connected') return;
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'input', data }));
@@ -331,6 +344,143 @@ export default function Terminal() {
     }
   }
 
+  function clearReconnectTimer() {
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }
+
+  function handleUnexpectedClose() {
+    if (isExplicitExitRef.current || isUnmountedRef.current) return;
+    setPhase('reconnecting');
+    scheduleReconnect(false);
+  }
+
+  function scheduleReconnect(immediate = false) {
+    if (isExplicitExitRef.current || isUnmountedRef.current) return;
+    clearReconnectTimer();
+
+    if (immediate) {
+      runReconnect();
+      return;
+    }
+
+    const delay = BACKOFF_DELAYS[retryCountRef.current] ?? 8000;
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      runReconnect();
+    }, delay);
+  }
+
+  async function runReconnect() {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId || isExplicitExitRef.current || isUnmountedRef.current) return;
+
+    if (retryCountRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      setPhase('disconnected');
+      return;
+    }
+
+    setPhase('reconnecting');
+
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      if (res.status === 404) {
+        isExplicitExitRef.current = true;
+        setPhase('exited');
+        return;
+      }
+    } catch {
+      retryCountRef.current += 1;
+      if (retryCountRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        setPhase('disconnected');
+      } else {
+        scheduleReconnect(false);
+      }
+      return;
+    }
+
+    if (isExplicitExitRef.current || isUnmountedRef.current) return;
+    connectWebSocket(sessionId);
+  }
+
+  function connectWebSocket(sessionId: string) {
+    if (wsRef.current) {
+      try {
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+      } catch {}
+      wsRef.current = null;
+    }
+
+    const wsUrl = new URL('/ws/pty', window.location.href);
+    wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    wsUrl.searchParams.set('session', sessionId);
+    const ws = new WebSocket(wsUrl.toString());
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (isUnmountedRef.current || wsRef.current !== ws) return;
+      clearReconnectTimer();
+      retryCountRef.current = 0;
+
+      if (hasConnectedOnceRef.current) {
+        xtermRef.current?.reset();
+      }
+      hasConnectedOnceRef.current = true;
+
+      setPhase('connected');
+      const term = xtermRef.current;
+      if (term && fitAddonRef.current) {
+        try {
+          fitAddonRef.current.fit();
+          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+        } catch {}
+      }
+    };
+
+    ws.onmessage = (event) => {
+      if (isUnmountedRef.current || wsRef.current !== ws) return;
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (msg.type === 'output') {
+        xtermRef.current?.write(msg.data);
+      } else if (msg.type === 'exit') {
+        isExplicitExitRef.current = true;
+        clearReconnectTimer();
+        setPhase('exited');
+      }
+    };
+
+    ws.onerror = () => {
+      if (isUnmountedRef.current || wsRef.current !== ws) return;
+      if (!hasConnectedOnceRef.current) {
+        setPhase('error');
+      }
+    };
+
+    ws.onclose = () => {
+      if (isUnmountedRef.current || wsRef.current !== ws) return;
+      if (isExplicitExitRef.current) {
+        setPhase('exited');
+        return;
+      }
+      if (!hasConnectedOnceRef.current) {
+        setPhase('error');
+        return;
+      }
+      handleUnexpectedClose();
+    };
+  }
+
   function connect(sessionId: string) {
     sessionIdRef.current = sessionId;
     setPhase('connecting');
@@ -364,6 +514,7 @@ export default function Terminal() {
       resizeObserverRef.current = resizeObserver;
 
       term.onData((data) => {
+        if (phaseRef.current !== 'connected') return;
         let processed = data;
         if (ctrlActiveRef.current && processed.length === 1) {
           const code = processed.toUpperCase().charCodeAt(0);
@@ -385,36 +536,7 @@ export default function Terminal() {
       });
     }
 
-    const wsUrl = new URL('/ws/pty', window.location.href);
-    wsUrl.protocol = wsUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-    wsUrl.searchParams.set('session', sessionId);
-    const ws = new WebSocket(wsUrl.toString());
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setPhase('connected');
-      const term = xtermRef.current!;
-      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-    };
-
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'output') {
-        xtermRef.current?.write(msg.data);
-      } else if (msg.type === 'exit') {
-        setPhase('exited');
-      }
-    };
-
-    ws.onerror = () => {
-      // If we never got past 'connecting', the session id was likely stale
-      // (e.g. server restarted) — fall back to letting the user re-launch it.
-      setPhase((p) => (p === 'connecting' ? 'error' : p));
-    };
-
-    ws.onclose = () => {
-      setPhase((p) => (p === 'connecting' ? 'error' : p === 'connected' ? 'exited' : p));
-    };
+    connectWebSocket(sessionId);
   }
 
   useEffect(() => {
@@ -435,8 +557,18 @@ export default function Terminal() {
       startTerminal(initial.cwd, initial.start ? (initial.cmds[0] ?? '') : undefined);
     }
     return () => {
-      wsRef.current?.close();
-      wsRef.current = null;
+      isUnmountedRef.current = true;
+      clearReconnectTimer();
+      if (wsRef.current) {
+        try {
+          wsRef.current.onopen = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onclose = null;
+          wsRef.current.close();
+        } catch {}
+        wsRef.current = null;
+      }
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       fitAddonRef.current = null;
@@ -447,6 +579,41 @@ export default function Terminal() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleWakeup = () => {
+      if (document.visibilityState === 'visible' && !isExplicitExitRef.current) {
+        const currentPhase = phaseRef.current;
+        const ws = wsRef.current;
+        const isSocketClosed = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+        if (
+          currentPhase === 'reconnecting' ||
+          currentPhase === 'disconnected' ||
+          (currentPhase === 'connected' && isSocketClosed)
+        ) {
+          retryCountRef.current = 0;
+          scheduleReconnect(true);
+        }
+      }
+    };
+
+    const handleOnline = () => {
+      if (!isExplicitExitRef.current) {
+        retryCountRef.current = 0;
+        scheduleReconnect(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleWakeup);
+    window.addEventListener('focus', handleWakeup);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleWakeup);
+      window.removeEventListener('focus', handleWakeup);
+      window.removeEventListener('online', handleOnline);
+    };
   }, []);
 
   useEffect(() => {
@@ -522,6 +689,10 @@ export default function Terminal() {
     const effectiveCmd = targetCmd !== undefined ? targetCmd : cmd;
     setError(null);
     setPhase('connecting');
+    isExplicitExitRef.current = false;
+    hasConnectedOnceRef.current = false;
+    retryCountRef.current = 0;
+    clearReconnectTimer();
     try {
       const res = await fetch('/api/sessions', {
         method: 'POST',
@@ -546,6 +717,11 @@ export default function Terminal() {
       setError((err as Error).message);
       setPhase('confirm');
     }
+  }
+
+  function handleManualRetry() {
+    retryCountRef.current = 0;
+    scheduleReconnect(true);
   }
 
   function startInNewTab() {
@@ -594,6 +770,8 @@ export default function Terminal() {
   }
 
   async function handleClose() {
+    isExplicitExitRef.current = true;
+    clearReconnectTimer();
     if (sessionIdRef.current) {
       try {
         await fetch(`/api/sessions/${sessionIdRef.current}`, { method: 'DELETE' });
@@ -841,8 +1019,52 @@ export default function Terminal() {
         onChange={handleFileInputChange}
         style={{ display: 'none' }}
       />
+      {phase === 'reconnecting' && (
+        <div className="banner warning" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" className="spin" aria-hidden="true">
+              <circle
+                cx="12"
+                cy="12"
+                r="9"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeDasharray="42"
+                strokeDashoffset="14"
+                strokeLinecap="round"
+              />
+            </svg>
+            Reconnecting to session…
+          </span>
+        </div>
+      )}
+      {phase === 'disconnected' && (
+        <div className="banner warning" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Connection lost.</span>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="banner-button"
+              onClick={handleManualRetry}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => {
+                window.location.href = '/';
+              }}
+              style={{ color: 'inherit', textDecoration: 'underline' }}
+            >
+              Back to home
+            </button>
+          </div>
+        </div>
+      )}
       {phase === 'exited' && (
-        <div className="banner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="banner danger" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Process exited.</span>
           <button
             type="button"
