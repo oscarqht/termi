@@ -48,7 +48,9 @@ export class OutputBuffer {
 const sessions = new Map();
 
 function shell() {
-  return process.env.SHELL || '/bin/zsh';
+  if (process.env.SHELL) return process.env.SHELL;
+  if (process.platform === 'win32') return process.env.COMSPEC || 'powershell.exe';
+  return process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
 }
 
 export function listSessions() {
@@ -64,7 +66,8 @@ export function listSessions() {
 
 export function createSession({ cwd, cmd, title }) {
   const id = crypto.randomUUID();
-  const term = pty.spawn(shell(), ['-l'], {
+  const isWin = process.platform === 'win32';
+  const term = pty.spawn(shell(), isWin ? [] : ['-l'], {
     name: 'xterm-256color',
     cols: 80,
     rows: 24,

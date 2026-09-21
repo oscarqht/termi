@@ -6,7 +6,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { exec as execCb } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+
+let customFolderPicker = null;
 import {
   listSessions,
   createSession,
@@ -177,21 +180,47 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/choose-folder') {
     res.setHeader('Content-Type', 'application/json');
-    if (process.platform !== 'darwin') {
-      res.statusCode = 501;
-      res.end(JSON.stringify({ error: 'Native folder picker is only supported on macOS' }));
+    if (customFolderPicker) {
+      try {
+        const cwd = await customFolderPicker();
+        res.end(JSON.stringify({ cwd: cwd || null }));
+      } catch (err) {
+        res.end(JSON.stringify({ cwd: null, error: err.message }));
+      }
       return true;
     }
-    try {
-      const { stdout } = await exec(
-        `osascript -e 'POSIX path of (choose folder with prompt "Select working directory")'`,
-      );
-      res.end(JSON.stringify({ cwd: stdout.trim().replace(/\/$/, '') }));
-    } catch {
-      // User dismissed the dialog without choosing a folder.
-      res.end(JSON.stringify({ cwd: null }));
+    if (process.platform === 'darwin') {
+      try {
+        const { stdout } = await exec(
+          `osascript -e 'POSIX path of (choose folder with prompt "Select working directory")'`,
+        );
+        res.end(JSON.stringify({ cwd: stdout.trim().replace(/\/$/, '') }));
+      } catch {
+        // User dismissed the dialog without choosing a folder.
+        res.end(JSON.stringify({ cwd: null }));
+      }
+      return true;
+    } else if (process.platform === 'win32') {
+      try {
+        const psCmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath }"`;
+        const { stdout } = await exec(psCmd);
+        const folder = stdout.trim();
+        res.end(JSON.stringify({ cwd: folder || null }));
+      } catch {
+        res.end(JSON.stringify({ cwd: null }));
+      }
+      return true;
+    } else {
+      try {
+        const { stdout } = await exec('zenity --file-selection --directory 2>/dev/null || kdialog --getexistingdirectory 2>/dev/null');
+        const folder = stdout.trim();
+        res.end(JSON.stringify({ cwd: folder || null }));
+      } catch {
+        res.statusCode = 501;
+        res.end(JSON.stringify({ error: 'Native folder picker is not supported on this platform' }));
+      }
+      return true;
     }
-    return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/sessions') {
@@ -272,7 +301,15 @@ async function handleApi(req, res, url) {
   return false;
 }
 
-async function createServer() {
+export async function startServer(options = {}) {
+  const isProd = options.isProd !== undefined ? options.isProd : (process.env.NODE_ENV === 'production');
+  const host = options.host || resolveHost();
+  const initialPort = options.port || (process.env.PORT ? Number(process.env.PORT) : 3200);
+  const autoPort = options.autoPort !== false;
+  if (options.chooseFolderHandler) {
+    customFolderPicker = options.chooseFolderHandler;
+  }
+
   let vite;
 
   const server = http.createServer(async (req, res) => {
@@ -385,9 +422,48 @@ async function createServer() {
     });
   });
 
-  server.listen(PORT, HOST, () => {
-    console.log(`termi listening on http://${HOST}:${PORT}`);
+  return new Promise((resolve, reject) => {
+    function tryListen(portToTry) {
+      const onError = (err) => {
+        server.removeListener('listening', onListening);
+        if (err.code === 'EADDRINUSE' && autoPort && portToTry < initialPort + 20) {
+          console.warn(`[termi] Port ${portToTry} in use, trying ${portToTry + 1}...`);
+          tryListen(portToTry + 1);
+        } else {
+          server.removeListener('error', onError);
+          reject(err);
+        }
+      };
+
+      const onListening = () => {
+        server.removeListener('error', onError);
+        const actualPort = server.address().port;
+        const url = `http://${host}:${actualPort}`;
+        console.log(`termi listening on ${url}`);
+        resolve({
+          server,
+          host,
+          port: actualPort,
+          url,
+          close: () => new Promise((res) => server.close(res)),
+        });
+      };
+
+      server.once('error', onError);
+      server.once('listening', onListening);
+      server.listen(portToTry, host);
+    }
+
+    tryListen(initialPort);
   });
 }
 
-createServer();
+export { resolveHost };
+
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
+  startServer().catch((err) => {
+    console.error('[termi] Failed to start server:', err);
+    process.exit(1);
+  });
+}
