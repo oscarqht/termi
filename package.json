@@ -7,13 +7,16 @@
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "postinstall": "node -e \"if (process.platform !== 'win32') { try { require('child_process').execSync('chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null'); } catch(e){} }\"",
     "dev": "node server/index.js",
     "build": "vite build",
     "start": "NODE_ENV=production node server/index.js",
     "rebuild": "electron-rebuild -f -w node-pty",
     "app": "npm run build && electron .",
-    "app:build": "npm run build && electron-builder"
+    "app:build": "npm run build && electron-builder",
+    "app:build:mac": "npm run build && electron-builder --mac",
+    "app:build:win": "npm run build && electron-builder --win --x64",
+    "app:build:all": "npm run build && electron-builder --mac --win"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -54,7 +57,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.ico"
     },
     "linux": {
       "target": [

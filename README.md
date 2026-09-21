@@ -31,11 +31,28 @@ npm run app
 
 ### Build Distributable Packages
 
-```bash
-npm run app:build
-```
+- **Build for macOS (`.dmg` & `.zip`):**
+  ```bash
+  npm run app:build:mac
+  ```
 
-Produces native installers/bundles (`.dmg` & `.zip` on macOS, `.exe` on Windows, `.AppImage` on Linux) under `dist/`.
+- **Build for Windows (`.exe` installer & portable):**
+  ```bash
+  npm run app:build:win
+  ```
+
+- **Build for both:**
+  ```bash
+  npm run app:build:all
+  ```
+
+Generated installers and packages will be located in the `dist/` directory.
+
+### Automated Releases (GitHub Actions)
+
+The repository includes [`.github/workflows/release.yml`](file:///.github/workflows/release.yml):
+- **Push to `main` branch:** Automatically detects the current version, bumps the minor version (e.g. `0.1.0` -> `0.2.0`), tags `v0.2.0`, builds both macOS and Windows packages, and publishes a new GitHub Release.
+- **Manual tag push:** Pushing any `v*` tag directly also triggers multi-platform builds and creates the GitHub Release.
 
 ## Headless / Terminal Mode
 

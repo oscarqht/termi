@@ -59,8 +59,10 @@ for target_w, target_h, out_path in sizes:
     tray_canvas.paste(scaled, (pos_x, pos_y), scaled)
     tray_canvas.save(out_path)
 
-# 3. Browser favicon
+# 3. Browser favicon and Windows ICO
 fav = app_icon.resize((64, 64), Image.Resampling.LANCZOS)
 fav.save('public/favicon.png')
+
+app_icon.save('assets/icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
 
 print("All icons successfully generated from new ant logo!")
