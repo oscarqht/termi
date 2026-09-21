@@ -62,10 +62,6 @@ jobs:
             arch: aarch64
             targets: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
-            arch: x86_64
-            targets: x86_64-apple-darwin
-            args: '--target x86_64-apple-darwin'
           - platform: windows-latest
             arch: x64
             targets: ''

@@ -228,7 +228,7 @@ pub fn start_update_checker(app: tauri::AppHandle) {
 
 The pipeline automates:
 1. Version bumps on push to `main` (synchronizing `package.json`, `tauri.conf.json`, and `Cargo.toml`).
-2. Concurrent matrix builds for macOS (`aarch64` and `x86_64`) and Windows.
+2. Concurrent matrix builds for macOS (Apple Silicon `aarch64`) and Windows (`x64`).
 3. Cryptographic signing of binaries with `TAURI_SIGNING_PRIVATE_KEY`.
 4. Generating `latest.json` with signature blocks and direct download links.
 5. Publishing the GitHub release.
@@ -291,10 +291,6 @@ jobs:
             arch: aarch64
             targets: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
-            arch: x86_64
-            targets: x86_64-apple-darwin
-            args: '--target x86_64-apple-darwin'
           - platform: windows-latest
             arch: x64
             targets: ''

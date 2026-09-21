@@ -9,9 +9,9 @@
     "tauri": "tauri",
     "dev": "vite",
     "build": "vite build",
-    "server:dev": "node server/index.js",
     "app:dev": "tauri dev",
-    "app:build": "npm run build && tauri build"
+    "app:build": "npm run build && tauri build",
+    "app:build:mac": "npm run build && tauri build --target aarch64-apple-darwin"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
