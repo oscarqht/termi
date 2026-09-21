@@ -278,20 +278,25 @@ jobs:
           fi
 
   build:
-    name: Build (${{ matrix.platform }})
+    name: Build (${{ matrix.platform }}-${{ matrix.arch }})
     needs: prepare
     if: needs.prepare.outputs.should_release == 'true'
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
+            arch: aarch64
             targets: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
           - platform: macos-latest
+            arch: x86_64
             targets: x86_64-apple-darwin
             args: '--target x86_64-apple-darwin'
           - platform: windows-latest
+            arch: x64
             targets: ''
             args: ''
     runs-on: ${{ matrix.platform }}
@@ -323,9 +328,9 @@ jobs:
           releaseBody: 'See assets below to install Termi.'
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
+          retryAttempts: 3
           args: ${{ matrix.args }}
 
   publish:
