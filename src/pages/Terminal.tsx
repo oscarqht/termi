@@ -344,6 +344,7 @@ export default function Terminal() {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: 13,
         theme: getSystemTheme(),
+        scrollback: 2000,
       });
       const fit = new FitAddon();
       fitAddonRef.current = fit;

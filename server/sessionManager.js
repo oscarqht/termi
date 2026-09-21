@@ -5,7 +5,45 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // Cap on buffered output kept per session for replay to a reconnecting client.
-const BUFFER_MAX_CHARS = 500_000;
+export const BUFFER_MAX_CHARS = 1_000_000;
+
+export class OutputBuffer {
+  constructor(maxChars = BUFFER_MAX_CHARS) {
+    this.maxChars = maxChars;
+    this.chunks = [];
+    this.totalLength = 0;
+  }
+
+  write(data) {
+    if (!data) return;
+    this.chunks.push(data);
+    this.totalLength += data.length;
+
+    // Prune complete chunks from the front while they fit entirely in the overflow
+    while (this.chunks.length > 0 && this.totalLength - this.chunks[0].length >= this.maxChars) {
+      this.totalLength -= this.chunks.shift().length;
+    }
+
+    // If still overflowing, slice only the oldest remaining chunk
+    if (this.totalLength > this.maxChars && this.chunks.length > 0) {
+      const overflow = this.totalLength - this.maxChars;
+      this.chunks[0] = this.chunks[0].slice(overflow);
+      this.totalLength = this.maxChars;
+    }
+  }
+
+  toString() {
+    if (this.chunks.length === 0) return '';
+    if (this.chunks.length === 1) return this.chunks[0];
+    const joined = this.chunks.join('');
+    this.chunks = [joined];
+    return joined;
+  }
+
+  get length() {
+    return this.totalLength;
+  }
+}
 
 const sessions = new Map();
 
@@ -41,7 +79,7 @@ export function createSession({ cwd, cmd, title }) {
     title: typeof title === 'string' ? title.trim() : '',
     createdAt: Date.now(),
     pty: term,
-    buffer: '',
+    buffer: new OutputBuffer(BUFFER_MAX_CHARS),
     clients: new Set(),
     uploadDir: path.join(os.tmpdir(), 'termi-uploads', id),
     exited: false,
@@ -52,10 +90,7 @@ export function createSession({ cwd, cmd, title }) {
   });
 
   term.onData((data) => {
-    session.buffer += data;
-    if (session.buffer.length > BUFFER_MAX_CHARS) {
-      session.buffer = session.buffer.slice(session.buffer.length - BUFFER_MAX_CHARS);
-    }
+    session.buffer.write(data);
     for (const client of session.clients) {
       if (client.readyState === 1 /* OPEN */) {
         try {
@@ -102,9 +137,10 @@ export function updateSessionTitle(id, title) {
 
 export function attachClient(session, ws) {
   session.clients.add(ws);
-  if (session.buffer) {
+  const data = session.buffer ? session.buffer.toString() : '';
+  if (data) {
     try {
-      ws.send(JSON.stringify({ type: 'output', data: session.buffer }));
+      ws.send(JSON.stringify({ type: 'output', data }));
     } catch {}
   }
 }
