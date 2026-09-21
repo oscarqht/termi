@@ -98,6 +98,18 @@ export const MobileAccessoryBar: FC<MobileAccessoryBarProps> = ({
             TAB
           </button>
 
+          {/* ENTER */}
+          <button
+            type="button"
+            className="mobile-key-btn"
+            onMouseDown={preventBlur}
+            onTouchStart={preventBlur}
+            onClick={() => handleKeyClick('\r')}
+            aria-label="Enter"
+          >
+            ENTER
+          </button>
+
           {/* CTRL Sticky */}
           <button
             type="button"
