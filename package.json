@@ -1,13 +1,22 @@
 {
   "name": "termi",
   "version": "0.1.0",
+  "description": "A cross-platform status bar terminal app",
+  "author": "oscarqht",
   "private": true,
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null || true",
+    "postinstall": "node -e \"if (process.platform !== 'win32') { try { require('child_process').execSync('chmod +x node_modules/node-pty/prebuilds/*/spawn-helper 2>/dev/null'); } catch(e){} }\"",
     "dev": "node server/index.js",
     "build": "vite build",
-    "start": "NODE_ENV=production node server/index.js"
+    "start": "NODE_ENV=production node server/index.js",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "app": "npm run build && electron .",
+    "app:build": "npm run build && electron-builder",
+    "app:build:mac": "npm run build && electron-builder --mac",
+    "app:build:win": "npm run build && electron-builder --win --x64",
+    "app:build:all": "npm run build && electron-builder --mac --win"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -18,12 +27,55 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.7.2",
     "vite": "^6.0.5"
+  },
+  "build": {
+    "appId": "com.termi.app",
+    "productName": "Termi",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.png",
+      "extendInfo": {
+        "LSUIElement": 1
+      }
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Development"
+    },
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "electron/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ]
   }
 }
