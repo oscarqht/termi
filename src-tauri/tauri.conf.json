@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Termi",
+  "version": "0.6.0",
+  "identifier": "com.oscarqht.termi",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": []
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "infoPlist": "./Info.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/oscarqht/termi/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIxNjgyQTdGNEIwMTBBMUIKUldRYkNnRkxmeXBvSVZrelZWeFdLb1Foc2ZzRHJWY1lFa1psbTlzclBlQ3B3NG5ROGVwbGZOUWgK"
+    }
+  }
+}

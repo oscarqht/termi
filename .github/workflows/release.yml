@@ -49,20 +49,20 @@ jobs:
           fi
 
   build:
-    name: Build (${{ matrix.os }})
+    name: Build (${{ matrix.platform }})
     needs: prepare
     if: needs.prepare.outputs.should_release == 'true'
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            build_cmd: npm run app:build:mac
-            artifact_name: mac-dist
-          - os: windows-latest
-            build_cmd: npm run app:build:win
-            artifact_name: win-dist
-    runs-on: ${{ matrix.os }}
+          - platform: macos-latest
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - platform: windows-latest
+            targets: ''
+    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -76,58 +76,50 @@ jobs:
           node-version: 22
           cache: 'npm'
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
-        run: ${{ matrix.build_cmd }}
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Build frontend
+        run: npm run build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+      - name: Build and Package with Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
-          name: ${{ matrix.artifact_name }}
-          path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
-            dist/*.blockmap
-            dist/latest*.yml
-          if-no-files-found: error
+          tagName: ${{ needs.prepare.outputs.tag }}
+          releaseName: 'Termi ${{ needs.prepare.outputs.tag }}'
+          releaseBody: 'See assets below to install Termi.'
+          releaseDraft: true
+          prerelease: false
 
   publish:
-    name: Publish GitHub Release
+    name: Publish Release
     needs: [prepare, build]
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.tag }}
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release_artifacts
-          merge-multiple: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Publish draft release
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          name: Termi ${{ needs.prepare.outputs.tag }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-          files: |
-            release_artifacts/*.dmg
-            release_artifacts/*.zip
-            release_artifacts/*.exe
-            release_artifacts/*.blockmap
-            release_artifacts/latest*.yml
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Publishing draft release ${{ needs.prepare.outputs.tag }}..."
+          gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false

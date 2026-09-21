@@ -43,13 +43,27 @@ if (isDryRun) {
   process.exit(0);
 }
 
-// 4. Update package.json & package-lock.json
+// 4. Update package.json, tauri.conf.json & Cargo.toml
 execSync(`npm version ${nextVersion} --no-git-tag-version`, { stdio: 'inherit' });
+
+const tauriConfPath = 'src-tauri/tauri.conf.json';
+if (fs.existsSync(tauriConfPath)) {
+  const conf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf8'));
+  conf.version = nextVersion;
+  fs.writeFileSync(tauriConfPath, JSON.stringify(conf, null, 2) + '\n');
+}
+
+const cargoTomlPath = 'src-tauri/Cargo.toml';
+if (fs.existsSync(cargoTomlPath)) {
+  let toml = fs.readFileSync(cargoTomlPath, 'utf8');
+  toml = toml.replace(/^version\s*=\s*"[^"]+"/m, `version = "${nextVersion}"`);
+  fs.writeFileSync(cargoTomlPath, toml);
+}
 
 // 5. Commit and tag
 execSync('git config user.name "github-actions[bot]"');
 execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
-execSync('git add package.json package-lock.json');
+execSync('git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml');
 execSync(`git commit -m "chore(release): ${nextTag} [skip ci]"`);
 execSync(`git tag ${nextTag}`);
 
