@@ -596,11 +596,11 @@ export default function Terminal() {
     if (sessionIdRef.current) {
       try {
         await fetch(`/api/sessions/${sessionIdRef.current}`, { method: 'DELETE' });
-        window.close();
       } catch (err) {
         console.error('Failed to close session', err);
       }
     }
+    window.location.href = '/';
   }
 
   if (phase === 'confirm' || phase === 'error') {
@@ -840,7 +840,21 @@ export default function Terminal() {
         onChange={handleFileInputChange}
         style={{ display: 'none' }}
       />
-      {phase === 'exited' && <div className="banner">Process exited.</div>}
+      {phase === 'exited' && (
+        <div className="banner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Process exited.</span>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              window.location.href = '/';
+            }}
+            style={{ color: 'inherit', textDecoration: 'underline' }}
+          >
+            Back to home
+          </button>
+        </div>
+      )}
       <div
         ref={containerRef}
         className={`xterm-container${dragActive ? ' drag-active' : ''}`}
