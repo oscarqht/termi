@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
+import { TextEditorModal } from '../components/TextEditorModal';
 import type { SessionInfo } from './Home';
 import { isSameCwd, normalizePath } from '../pathUtils';
 
@@ -120,6 +121,7 @@ export default function Terminal() {
   const [cwd, setCwd] = useState(initial.cwd);
   const [sessionTitle, setSessionTitle] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
@@ -366,6 +368,20 @@ export default function Terminal() {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'input', data }));
+    }
+  }
+
+  function handleSendEditorText(text: string, execute: boolean) {
+    if (phaseRef.current !== 'connected') return;
+    const term = xtermRef.current;
+    if (term) {
+      term.paste(text);
+      if (execute) {
+        sendInput('\r');
+      }
+      term.focus();
+    } else {
+      sendInput(execute ? text + '\r' : text);
     }
   }
 
@@ -701,6 +717,22 @@ export default function Terminal() {
     mql.addEventListener('change', handleThemeChange);
     return () => {
       mql.removeEventListener('change', handleThemeChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (phaseRef.current === 'connected') {
+          setEditorOpen((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
   }, []);
 
@@ -1054,6 +1086,29 @@ export default function Terminal() {
         {phase === 'connected' && (
           <button
             className="icon-button"
+            onClick={() => setEditorOpen(true)}
+            title="Text editor (⌘⇧E / Ctrl+Shift+E)"
+            aria-label="Text editor"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          </button>
+        )}
+        {phase === 'connected' && (
+          <button
+            className="icon-button"
             onClick={handleOpenSettings}
             title="Session settings"
             aria-label="Session settings"
@@ -1239,8 +1294,18 @@ export default function Terminal() {
           onToggleKeyboard={toggleKeyboard}
           collapsed={barCollapsed}
           setCollapsed={setBarCollapsed}
+          onOpenEditor={() => setEditorOpen(true)}
         />
       )}
+      <TextEditorModal
+        isOpen={editorOpen}
+        onClose={() => {
+          setEditorOpen(false);
+          xtermRef.current?.focus();
+        }}
+        onSend={handleSendEditorText}
+        sessionId={sessionIdRef.current}
+      />
     </div>
   );
 }
