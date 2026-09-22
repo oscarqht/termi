@@ -52,13 +52,22 @@ pub fn run() {
         .expect("error while building termi application");
 
     app.run(|app_handle, event| {
-        #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::Reopen { .. } = event {
-            let handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                updater::handle_app_reopen(&handle).await;
-            });
+        match event {
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => {
+                let handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    updater::handle_app_reopen(&handle).await;
+                });
+            }
+            tauri::RunEvent::ExitRequested { code, api, .. } => {
+                // Keep the app running in the status bar/tray when windows are closed.
+                // Only permit exit when an explicit code is provided (e.g. from "Quit Termi").
+                if code.is_none() {
+                    api.prevent_exit();
+                }
+            }
+            _ => {}
         }
-        let _ = (app_handle, event);
     });
 }

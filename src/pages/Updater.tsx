@@ -35,7 +35,124 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
+function useSystemTheme(): 'dark' | 'light' {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      setTheme(e.matches ? 'dark' : 'light');
+    };
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  return theme;
+}
+
+const themeTokens = {
+  dark: {
+    bg: '#0f172a',
+    text: '#f8fafc',
+    headerBorder: '#1e293b',
+    iconBadgeBg: '#1e293b',
+    iconBadgeBorder: '#334155',
+    iconBadgeColor: '#38bdf8',
+    title: '#f1f5f9',
+    subtitle: '#64748b',
+    stateTitle: '#f8fafc',
+    stateDesc: '#94a3b8',
+    highlightText: '#e2e8f0',
+    spinnerBorder: '#334155',
+    spinnerAccent: '#38bdf8',
+    successBg: 'rgba(16, 185, 129, 0.12)',
+    successBorder: 'rgba(16, 185, 129, 0.3)',
+    successStroke: '#10b981',
+    errorBg: 'rgba(239, 68, 68, 0.12)',
+    errorBorder: 'rgba(239, 68, 68, 0.3)',
+    errorStroke: '#ef4444',
+    errorBoxBg: 'rgba(239, 68, 68, 0.1)',
+    errorBoxBorder: 'rgba(239, 68, 68, 0.25)',
+    errorBoxText: '#f87171',
+    versionCurrentBg: '#1e293b',
+    versionCurrentBorder: '#334155',
+    versionCurrentText: '#94a3b8',
+    arrowColor: '#64748b',
+    versionNewBg: 'rgba(56, 189, 248, 0.15)',
+    versionNewBorder: 'rgba(56, 189, 248, 0.3)',
+    versionNewText: '#38bdf8',
+    progressTrackBg: '#1e293b',
+    progressTrackBorder: '#334155',
+    progressFillBg: '#38bdf8',
+    progressStatsText: '#64748b',
+    notesBg: '#090d16',
+    notesBorder: '#1e293b',
+    notesTitle: '#64748b',
+    notesContent: '#cbd5e1',
+    footerBorder: '#1e293b',
+    btnPrimaryBg: '#0284c7',
+    btnPrimaryText: '#ffffff',
+    btnSecondaryBg: '#1e293b',
+    btnSecondaryBorder: '#334155',
+    btnSecondaryText: '#94a3b8',
+  },
+  light: {
+    bg: '#ffffff',
+    text: '#0f172a',
+    headerBorder: '#e2e8f0',
+    iconBadgeBg: '#f1f5f9',
+    iconBadgeBorder: '#e2e8f0',
+    iconBadgeColor: '#0284c7',
+    title: '#0f172a',
+    subtitle: '#64748b',
+    stateTitle: '#0f172a',
+    stateDesc: '#475569',
+    highlightText: '#0f172a',
+    spinnerBorder: '#e2e8f0',
+    spinnerAccent: '#0284c7',
+    successBg: 'rgba(16, 185, 129, 0.12)',
+    successBorder: 'rgba(16, 185, 129, 0.35)',
+    successStroke: '#059669',
+    errorBg: 'rgba(239, 68, 68, 0.12)',
+    errorBorder: 'rgba(239, 68, 68, 0.35)',
+    errorStroke: '#dc2626',
+    errorBoxBg: '#fef2f2',
+    errorBoxBorder: '#fecaca',
+    errorBoxText: '#b91c1c',
+    versionCurrentBg: '#f1f5f9',
+    versionCurrentBorder: '#cbd5e1',
+    versionCurrentText: '#475569',
+    arrowColor: '#94a3b8',
+    versionNewBg: 'rgba(2, 132, 199, 0.1)',
+    versionNewBorder: 'rgba(2, 132, 199, 0.25)',
+    versionNewText: '#0284c7',
+    progressTrackBg: '#e2e8f0',
+    progressTrackBorder: '#cbd5e1',
+    progressFillBg: '#0284c7',
+    progressStatsText: '#64748b',
+    notesBg: '#f8fafc',
+    notesBorder: '#e2e8f0',
+    notesTitle: '#64748b',
+    notesContent: '#334155',
+    footerBorder: '#e2e8f0',
+    btnPrimaryBg: '#0284c7',
+    btnPrimaryText: '#ffffff',
+    btnSecondaryBg: '#f1f5f9',
+    btnSecondaryBorder: '#cbd5e1',
+    btnSecondaryText: '#334155',
+  },
+};
+
 export default function Updater() {
+  const theme = useSystemTheme();
+  const c = themeTokens[theme];
+
   const [status, setStatus] = useState<UpdateStatusData>({ status: 'Checking' });
   const [isInstalling, setIsInstalling] = useState(false);
 
@@ -93,68 +210,211 @@ export default function Updater() {
   };
 
   return (
-    <div style={styles.container}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        boxSizing: 'border-box',
+        backgroundColor: c.bg,
+        color: c.text,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        padding: '20px 24px',
+        userSelect: 'none',
+        transition: 'background-color 0.2s ease, color 0.2s ease',
+      }}
+    >
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.appIconBadge}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          paddingBottom: '16px',
+          borderBottom: `1px solid ${c.headerBorder}`,
+          transition: 'border-color 0.2s ease',
+        }}
+      >
+        <div
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '10px',
+            backgroundColor: c.iconBadgeBg,
+            border: `1px solid ${c.iconBadgeBorder}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: c.iconBadgeColor,
+            transition: 'all 0.2s ease',
+          }}
+        >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="4 17 10 11 4 5"></polyline>
             <line x1="12" y1="19" x2="20" y2="19"></line>
           </svg>
         </div>
         <div>
-          <h1 style={styles.title}>Termi Software Update</h1>
-          <span style={styles.subtitle}>Cross-platform Terminal Manager</span>
+          <h1 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: c.title }}>
+            Termi Software Update
+          </h1>
+          <span style={{ fontSize: '12px', color: c.subtitle }}>Cross-platform Terminal Manager</span>
         </div>
       </div>
 
-      <div style={styles.content}>
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '16px 0',
+        }}
+      >
         {/* State: Checking */}
         {status.status === 'Checking' && (
-          <div style={styles.centeredState}>
-            <div style={styles.spinner}></div>
-            <p style={styles.stateTitle}>Checking for updates...</p>
-            <p style={styles.stateDescription}>Contacting release server for the latest version</p>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              maxWidth: '340px',
+            }}
+          >
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                border: `3px solid ${c.spinnerBorder}`,
+                borderTop: `3px solid ${c.spinnerAccent}`,
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+            <p style={{ fontSize: '15px', fontWeight: 600, color: c.stateTitle, margin: '14px 0 6px 0' }}>
+              Checking for updates...
+            </p>
+            <p style={{ fontSize: '13px', color: c.stateDesc, margin: 0, lineHeight: 1.4 }}>
+              Contacting release server for the latest version
+            </p>
           </div>
         )}
 
         {/* State: UpToDate */}
         {status.status === 'UpToDate' && (
-          <div style={styles.centeredState}>
-            <div style={styles.iconCircleSuccess}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              maxWidth: '340px',
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: c.successBg,
+                border: `1px solid ${c.successBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={c.successStroke} strokeWidth="2.5">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
             </div>
-            <p style={styles.stateTitle}>You're up to date!</p>
-            <p style={styles.stateDescription}>
-              Termi <strong style={{ color: '#e2e8f0' }}>v{status.data.current_version}</strong> is currently the newest version available.
+            <p style={{ fontSize: '15px', fontWeight: 600, color: c.stateTitle, margin: '14px 0 6px 0' }}>
+              You're up to date!
+            </p>
+            <p style={{ fontSize: '13px', color: c.stateDesc, margin: 0, lineHeight: 1.4 }}>
+              Termi <strong style={{ color: c.highlightText }}>v{status.data.current_version}</strong> is currently the newest version available.
             </p>
           </div>
         )}
 
         {/* State: Downloading */}
         {status.status === 'Downloading' && (
-          <div style={styles.downloadState}>
-            <div style={styles.versionBadgeRow}>
-              <span style={styles.versionTag}>v{status.data.current_version}</span>
-              <span style={styles.arrowIcon}>→</span>
-              <span style={styles.versionTagNew}>v{status.data.version}</span>
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span
+                style={{
+                  fontSize: '12px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: c.versionCurrentBg,
+                  color: c.versionCurrentText,
+                  border: `1px solid ${c.versionCurrentBorder}`,
+                  fontWeight: 500,
+                }}
+              >
+                v{status.data.current_version}
+              </span>
+              <span style={{ color: c.arrowColor, fontSize: '13px' }}>→</span>
+              <span
+                style={{
+                  fontSize: '12px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: c.versionNewBg,
+                  color: c.versionNewText,
+                  border: `1px solid ${c.versionNewBorder}`,
+                  fontWeight: 600,
+                }}
+              >
+                v{status.data.version}
+              </span>
             </div>
 
-            <p style={styles.stateTitle}>Downloading update...</p>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: c.stateTitle, margin: '6px 0 12px 0' }}>
+              Downloading update...
+            </p>
 
             {/* Progress bar */}
-            <div style={styles.progressBarTrack}>
+            <div
+              style={{
+                width: '100%',
+                height: '8px',
+                backgroundColor: c.progressTrackBg,
+                borderRadius: '4px',
+                overflow: 'hidden',
+                border: `1px solid ${c.progressTrackBorder}`,
+              }}
+            >
               <div
                 style={{
-                  ...styles.progressBarFill,
+                  height: '100%',
+                  backgroundColor: c.progressFillBg,
+                  borderRadius: '4px',
+                  transition: 'width 0.2s ease',
                   width: `${Math.max(5, Math.min(status.data.percent, 100))}%`,
                 }}
               />
             </div>
 
-            <div style={styles.progressStats}>
+            <div
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '11px',
+                color: c.progressStatsText,
+                marginTop: '6px',
+              }}
+            >
               <span>{status.data.percent}%</span>
               <span>
                 {formatBytes(status.data.downloaded)}
@@ -166,22 +426,88 @@ export default function Updater() {
 
         {/* State: Downloaded / Ready to install */}
         {status.status === 'Downloaded' && (
-          <div style={styles.readyContainer}>
-            <div style={styles.versionBadgeRow}>
-              <span style={styles.versionTag}>v{status.data.current_version}</span>
-              <span style={styles.arrowIcon}>→</span>
-              <span style={styles.versionTagNew}>v{status.data.version}</span>
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span
+                style={{
+                  fontSize: '12px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: c.versionCurrentBg,
+                  color: c.versionCurrentText,
+                  border: `1px solid ${c.versionCurrentBorder}`,
+                  fontWeight: 500,
+                }}
+              >
+                v{status.data.current_version}
+              </span>
+              <span style={{ color: c.arrowColor, fontSize: '13px' }}>→</span>
+              <span
+                style={{
+                  fontSize: '12px',
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: c.versionNewBg,
+                  color: c.versionNewText,
+                  border: `1px solid ${c.versionNewBorder}`,
+                  fontWeight: 600,
+                }}
+              >
+                v{status.data.version}
+              </span>
             </div>
 
-            <p style={styles.stateTitle}>New version ready to install</p>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: c.stateTitle, margin: '6px 0 10px 0' }}>
+              New version ready to install
+            </p>
 
             {status.data.body ? (
-              <div style={styles.releaseNotesBox}>
-                <div style={styles.releaseNotesTitle}>Release Notes:</div>
-                <div style={styles.releaseNotesContent}>{status.data.body}</div>
+              <div
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  maxHeight: '130px',
+                  overflowY: 'auto',
+                  backgroundColor: c.notesBg,
+                  border: `1px solid ${c.notesBorder}`,
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  textAlign: 'left',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: c.notesTitle,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: '4px',
+                  }}
+                >
+                  Release Notes:
+                </div>
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: c.notesContent,
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.5,
+                    userSelect: 'text',
+                  }}
+                >
+                  {status.data.body}
+                </div>
               </div>
             ) : (
-              <p style={styles.stateDescription}>
+              <p style={{ fontSize: '13px', color: c.stateDesc, margin: 0, lineHeight: 1.4 }}>
                 Download completed. Click below to install and relaunch Termi immediately.
               </p>
             )}
@@ -190,61 +516,191 @@ export default function Updater() {
 
         {/* State: Error */}
         {status.status === 'Error' && (
-          <div style={styles.centeredState}>
-            <div style={styles.iconCircleError}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              maxWidth: '340px',
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: c.errorBg,
+                border: `1px solid ${c.errorBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={c.errorStroke} strokeWidth="2.5">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
               </svg>
             </div>
-            <p style={styles.stateTitle}>Update Check Failed</p>
-            <p style={styles.errorText}>{status.data.message}</p>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: c.stateTitle, margin: '14px 0 6px 0' }}>
+              Update Check Failed
+            </p>
+            <p
+              style={{
+                fontSize: '12px',
+                color: c.errorBoxText,
+                backgroundColor: c.errorBoxBg,
+                border: `1px solid ${c.errorBoxBorder}`,
+                padding: '8px 12px',
+                borderRadius: '6px',
+                margin: '8px 0 0 0',
+                maxWidth: '320px',
+                wordBreak: 'break-word',
+              }}
+            >
+              {status.data.message}
+            </p>
           </div>
         )}
 
         {/* State: Idle */}
         {status.status === 'Idle' && (
-          <div style={styles.centeredState}>
-            <p style={styles.stateTitle}>Update Service Idle</p>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              maxWidth: '340px',
+            }}
+          >
+            <p style={{ fontSize: '15px', fontWeight: 600, color: c.stateTitle }}>Update Service Idle</p>
           </div>
         )}
       </div>
 
       {/* Footer Actions */}
-      <div style={styles.footer}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '10px',
+          paddingTop: '14px',
+          borderTop: `1px solid ${c.footerBorder}`,
+          transition: 'border-color 0.2s ease',
+        }}
+      >
         {status.status === 'Downloaded' ? (
           <>
             <button
               onClick={handleClose}
               disabled={isInstalling}
-              style={{ ...styles.button, ...styles.buttonSecondary }}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: `1px solid ${c.btnSecondaryBorder}`,
+                outline: 'none',
+                backgroundColor: c.btnSecondaryBg,
+                color: c.btnSecondaryText,
+                transition: 'all 0.15s ease',
+              }}
             >
               Later
             </button>
             <button
               onClick={handleInstallAndRelaunch}
               disabled={isInstalling}
-              style={{ ...styles.button, ...styles.buttonPrimary }}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: 'none',
+                outline: 'none',
+                backgroundColor: c.btnPrimaryBg,
+                color: c.btnPrimaryText,
+                transition: 'all 0.15s ease',
+              }}
             >
               {isInstalling ? 'Restarting...' : 'Install & Relaunch'}
             </button>
           </>
         ) : status.status === 'Error' ? (
           <>
-            <button onClick={handleClose} style={{ ...styles.button, ...styles.buttonSecondary }}>
+            <button
+              onClick={handleClose}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: `1px solid ${c.btnSecondaryBorder}`,
+                outline: 'none',
+                backgroundColor: c.btnSecondaryBg,
+                color: c.btnSecondaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
               Close
             </button>
-            <button onClick={handleCheckAgain} style={{ ...styles.button, ...styles.buttonPrimary }}>
+            <button
+              onClick={handleCheckAgain}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: 'none',
+                outline: 'none',
+                backgroundColor: c.btnPrimaryBg,
+                color: c.btnPrimaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
               Check Again
             </button>
           </>
         ) : status.status === 'Downloading' ? (
-          <button onClick={handleClose} style={{ ...styles.button, ...styles.buttonSecondary }}>
+          <button
+            onClick={handleClose}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: `1px solid ${c.btnSecondaryBorder}`,
+              outline: 'none',
+              backgroundColor: c.btnSecondaryBg,
+              color: c.btnSecondaryText,
+              transition: 'all 0.15s ease',
+            }}
+          >
             Hide to Background
           </button>
         ) : (
-          <button onClick={handleClose} style={{ ...styles.button, ...styles.buttonPrimary }}>
+          <button
+            onClick={handleClose}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: 'none',
+              outline: 'none',
+              backgroundColor: c.btnPrimaryBg,
+              color: c.btnPrimaryText,
+              transition: 'all 0.15s ease',
+            }}
+          >
             Close
           </button>
         )}
@@ -252,226 +708,3 @@ export default function Updater() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
-    boxSizing: 'border-box',
-    backgroundColor: '#0f172a',
-    color: '#f8fafc',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    padding: '20px 24px',
-    userSelect: 'none',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    paddingBottom: '16px',
-    borderBottom: '1px solid #1e293b',
-  },
-  appIconBadge: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '10px',
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#38bdf8',
-  },
-  title: {
-    margin: 0,
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#f1f5f9',
-  },
-  subtitle: {
-    fontSize: '12px',
-    color: '#64748b',
-  },
-  content: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '16px 0',
-  },
-  centeredState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    textAlign: 'center',
-    maxWidth: '340px',
-  },
-  stateTitle: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#f8fafc',
-    margin: '12px 0 6px 0',
-  },
-  stateDescription: {
-    fontSize: '13px',
-    color: '#94a3b8',
-    margin: 0,
-    lineHeight: 1.4,
-  },
-  spinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid #334155',
-    borderTop: '3px solid #38bdf8',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  iconCircleSuccess: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '50%',
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    border: '1px solid rgba(16, 185, 129, 0.3)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconCircleError: {
-    width: '48px',
-    height: '48px',
-    borderRadius: '50%',
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    border: '1px solid rgba(239, 68, 68, 0.3)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorText: {
-    fontSize: '12px',
-    color: '#f87171',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    padding: '8px 12px',
-    borderRadius: '6px',
-    margin: '8px 0 0 0',
-    maxWidth: '320px',
-    wordBreak: 'break-word',
-  },
-  downloadState: {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-  },
-  versionBadgeRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '8px',
-  },
-  versionTag: {
-    fontSize: '12px',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    backgroundColor: '#1e293b',
-    color: '#94a3b8',
-    border: '1px solid #334155',
-    fontWeight: 500,
-  },
-  arrowIcon: {
-    color: '#64748b',
-    fontSize: '13px',
-  },
-  versionTagNew: {
-    fontSize: '12px',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    color: '#38bdf8',
-    border: '1px solid rgba(56, 189, 248, 0.3)',
-    fontWeight: 600,
-  },
-  progressBarTrack: {
-    width: '100%',
-    height: '8px',
-    backgroundColor: '#1e293b',
-    borderRadius: '4px',
-    overflow: 'hidden',
-    marginTop: '16px',
-    border: '1px solid #334155',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#38bdf8',
-    borderRadius: '4px',
-    transition: 'width 0.2s ease',
-  },
-  progressStats: {
-    width: '100%',
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '11px',
-    color: '#64748b',
-    marginTop: '6px',
-  },
-  readyContainer: {
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-  },
-  releaseNotesBox: {
-    width: '100%',
-    boxSizing: 'border-box',
-    maxHeight: '130px',
-    overflowY: 'auto',
-    backgroundColor: '#090d16',
-    border: '1px solid #1e293b',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    marginTop: '10px',
-    textAlign: 'left',
-  },
-  releaseNotesTitle: {
-    fontSize: '11px',
-    fontWeight: 600,
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom: '4px',
-  },
-  releaseNotesContent: {
-    fontSize: '12px',
-    color: '#cbd5e1',
-    whiteSpace: 'pre-wrap',
-    lineHeight: 1.5,
-    userSelect: 'text',
-  },
-  footer: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '10px',
-    paddingTop: '14px',
-    borderTop: '1px solid #1e293b',
-  },
-  button: {
-    padding: '8px 16px',
-    borderRadius: '6px',
-    fontSize: '13px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    border: 'none',
-    outline: 'none',
-    transition: 'all 0.15s ease',
-  },
-  buttonPrimary: {
-    backgroundColor: '#0284c7',
-    color: '#ffffff',
-  },
-  buttonSecondary: {
-    backgroundColor: '#1e293b',
-    color: '#94a3b8',
-    border: '1px solid #334155',
-  },
-};
