@@ -71,6 +71,12 @@ pub fn open_or_focus_updater_window(app: &AppHandle) -> tauri::Result<()> {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        let state_arc = app.state::<UpdateState>().0.clone();
+        let handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let mgr = state_arc.lock().await;
+            let _ = handle.emit("termi://update-status", &mgr.status);
+        });
         return Ok(());
     }
 
@@ -108,7 +114,9 @@ pub async fn check_and_download_silent(app: &AppHandle) {
     {
         let mut mgr = state.0.lock().await;
         mgr.is_checking_or_downloading = true;
+        mgr.status = UpdateStatus::Checking;
     }
+    let _ = app.emit("termi://update-status", UpdateStatus::Checking);
 
     let updater = match app.updater() {
         Ok(u) => u,
@@ -227,9 +235,21 @@ pub async fn check_and_download_silent(app: &AppHandle) {
         }
         Ok(None) => {
             println!("[termi] Auto-updater: Termi is up to date.");
+            let status = UpdateStatus::UpToDate {
+                current_version: app.package_info().version.to_string(),
+            };
+            let mut mgr = state.0.lock().await;
+            mgr.status = status.clone();
+            let _ = app.emit("termi://update-status", &status);
         }
         Err(e) => {
             eprintln!("[termi] Auto-updater check error: {e}");
+            let err_status = UpdateStatus::Error {
+                message: format!("Check failed: {e}"),
+            };
+            let mut mgr = state.0.lock().await;
+            mgr.status = err_status.clone();
+            let _ = app.emit("termi://update-status", &err_status);
         }
     }
 

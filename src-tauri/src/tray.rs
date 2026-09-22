@@ -1,7 +1,32 @@
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager, Wry};
 use tauri_plugin_autostart::ManagerExt;
+
+#[cfg(target_os = "macos")]
+use std::sync::Mutex;
+
+#[cfg(target_os = "macos")]
+pub struct TrayFdaState {
+    pub item: Mutex<Option<CheckMenuItem<Wry>>>,
+}
+
+#[cfg(target_os = "macos")]
+pub fn update_fda_menu_item(app: &AppHandle) {
+    if let Some(state) = app.try_state::<TrayFdaState>() {
+        let granted = check_full_disk_access();
+        if let Ok(guard) = state.item.lock() {
+            if let Some(item) = guard.as_ref() {
+                let _ = item.set_checked(granted);
+                let _ = item.set_text(if granted {
+                    "Full Disk Access Enabled"
+                } else {
+                    "Grant Full Disk Access..."
+                });
+            }
+        }
+    }
+}
 
 fn copy_to_clipboard(text: &str) {
     #[cfg(target_os = "macos")]
@@ -105,12 +130,34 @@ pub fn setup_tray(
     let fda_granted = check_full_disk_access();
     #[cfg(target_os = "macos")]
     let fda_text = if fda_granted {
-        "✓ Full Disk Access Enabled"
+        "Full Disk Access Enabled"
     } else {
-        "⚠️ Grant Full Disk Access..."
+        "Grant Full Disk Access..."
     };
     #[cfg(target_os = "macos")]
-    let fda_item = MenuItem::with_id(app, "full_disk_access", fda_text, true, None::<&str>)?;
+    let fda_item = CheckMenuItem::with_id(
+        app,
+        "full_disk_access",
+        fda_text,
+        true,
+        fda_granted,
+        None::<&str>,
+    )?;
+    #[cfg(target_os = "macos")]
+    {
+        app.manage(TrayFdaState {
+            item: Mutex::new(Some(fda_item.clone())),
+        });
+
+        let app_handle_poll = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
+            loop {
+                interval.tick().await;
+                update_fda_menu_item(&app_handle_poll);
+            }
+        });
+    }
 
     let autostart_item = CheckMenuItem::with_id(
         app,
@@ -192,6 +239,7 @@ pub fn setup_tray(
                 #[cfg(target_os = "macos")]
                 "full_disk_access" => {
                     open_full_disk_access_settings();
+                    update_fda_menu_item(app_handle);
                 }
                 "toggle_autostart" => {
                     let autolaunch = app_handle.autolaunch();
@@ -217,7 +265,13 @@ pub fn setup_tray(
         })
         .on_tray_icon_event({
             let url_for_click = server_url.clone();
+            #[cfg(target_os = "macos")]
+            let app_handle_tray = app.clone();
             move |_tray, event| {
+                #[cfg(target_os = "macos")]
+                {
+                    update_fda_menu_item(&app_handle_tray);
+                }
                 if let TrayIconEvent::Click {
                     button: MouseButton::Left,
                     button_state: MouseButtonState::Up,

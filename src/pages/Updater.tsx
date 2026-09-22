@@ -157,24 +157,74 @@ export default function Updater() {
   const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     // Fetch initial status from backend
     invoke<UpdateStatusData>('get_update_status')
       .then((res) => {
+        if (!mounted) return;
         setStatus(res);
+        if (res.status === 'Idle') {
+          invoke('check_for_updates_manual').catch((err) => {
+            console.error('Failed to trigger update check:', err);
+          });
+        }
       })
       .catch((err) => {
         console.error('Failed to get update status:', err);
       });
 
     // Listen for real-time status and download progress updates
-    const unlistenPromise = listen<UpdateStatusData>('termi://update-status', (event) => {
+    let unlisten: (() => void) | undefined;
+    listen<UpdateStatusData>('termi://update-status', (event) => {
+      if (!mounted) return;
       setStatus(event.payload);
-    });
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch((err) => {
+        console.error('Failed to listen to termi://update-status:', err);
+      });
+
+    // Refresh status when window receives focus
+    const onFocus = () => {
+      invoke<UpdateStatusData>('get_update_status')
+        .then((res) => {
+          if (mounted) setStatus(res);
+        })
+        .catch(console.error);
+    };
+    window.addEventListener('focus', onFocus);
 
     return () => {
-      unlistenPromise.then((unlisten) => unlisten());
+      mounted = false;
+      if (unlisten) unlisten();
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
+
+  // Poll backend status while checking or downloading to prevent any desync
+  useEffect(() => {
+    if (status.status !== 'Checking' && status.status !== 'Downloading') {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      invoke<UpdateStatusData>('get_update_status')
+        .then((res) => {
+          setStatus((prev) => {
+            if (JSON.stringify(prev) !== JSON.stringify(res)) {
+              return res;
+            }
+            return prev;
+          });
+        })
+        .catch(console.error);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [status.status]);
 
   const handleClose = async () => {
     try {
