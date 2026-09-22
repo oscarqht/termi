@@ -151,7 +151,8 @@ cmd.arg("-l");
 // Configure terminal emulation and color capabilities (crucial for GUI apps)
 cmd.env("TERM", "xterm-256color");
 cmd.env("COLORTERM", "truecolor");
-cmd.env("TERM_PROGRAM", "Termi");
+cmd.env("TERM_PROGRAM", "Apple_Terminal");
+cmd.env("TERM_PROGRAM_VERSION", "470.2");
 cmd.env("LANG", "en_US.UTF-8");
 
 let child = pair.slave.spawn_command(cmd)?;

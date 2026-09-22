@@ -209,8 +209,8 @@ impl SessionManager {
         // back to monochrome / no-color mode.
         cmd_builder.env("TERM", "xterm-256color");
         cmd_builder.env("COLORTERM", "truecolor");
-        cmd_builder.env("TERM_PROGRAM", "Termi");
-        cmd_builder.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+        cmd_builder.env("TERM_PROGRAM", "Apple_Terminal");
+        cmd_builder.env("TERM_PROGRAM_VERSION", "470.2");
 
         // Ensure UTF-8 locale so CLI tools render unicode block graphics and characters
         if std::env::var("LANG").map(|l| l.is_empty() || l == "C" || l == "POSIX").unwrap_or(true) {

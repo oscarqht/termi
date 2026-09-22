@@ -10,7 +10,14 @@ use session::SessionManager;
 pub fn run() {
     let session_manager = Arc::new(SessionManager::new());
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
+        .manage(updater::init_state())
+        .invoke_handler(tauri::generate_handler![
+            updater::check_for_updates_manual,
+            updater::get_update_status,
+            updater::install_and_relaunch,
+            updater::close_update_window,
+        ])
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
@@ -41,6 +48,17 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running termi application");
+        .build(tauri::generate_context!())
+        .expect("error while building termi application");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            let handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                updater::handle_app_reopen(&handle).await;
+            });
+        }
+        let _ = (app_handle, event);
+    });
 }

@@ -71,7 +71,8 @@ export function createSession({ cwd, cmd, title }) {
     ...process.env,
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
-    TERM_PROGRAM: 'Termi',
+    TERM_PROGRAM: 'Apple_Terminal',
+    TERM_PROGRAM_VERSION: '470.2',
   };
   if (!termEnv.LANG || termEnv.LANG === 'C' || termEnv.LANG === 'POSIX') {
     termEnv.LANG = 'en_US.UTF-8';

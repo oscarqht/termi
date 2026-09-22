@@ -1,6 +1,6 @@
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Runtime};
+use tauri::AppHandle;
 use tauri_plugin_autostart::ManagerExt;
 
 fn copy_to_clipboard(text: &str) {
@@ -40,8 +40,8 @@ fn copy_to_clipboard(text: &str) {
     }
 }
 
-pub fn setup_tray<R: Runtime>(
-    app: &AppHandle<R>,
+pub fn setup_tray(
+    app: &AppHandle,
     server_url: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let autostart_enabled = app
@@ -67,6 +67,7 @@ pub fn setup_tray<R: Runtime>(
         true,
         None::<&str>,
     )?;
+    crate::updater::register_tray_item(app, check_updates_item.clone());
     let version_text = format!("Version {}", app.package_info().version);
     let version_item = MenuItem::with_id(
         app,
@@ -93,9 +94,12 @@ pub fn setup_tray<R: Runtime>(
     )?;
 
     let url_for_menu = server_url.clone();
-    let tray_icon = app.default_window_icon().cloned();
+    let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+        .ok()
+        .or_else(|| app.default_window_icon().cloned());
 
     let mut builder = TrayIconBuilder::with_id("termi-tray")
+        .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .tooltip("Termi Web Terminal")
@@ -121,7 +125,7 @@ pub fn setup_tray<R: Runtime>(
                 "check_updates" => {
                     let handle = app_handle.clone();
                     tauri::async_runtime::spawn(async move {
-                        crate::updater::check_for_updates(&handle, true).await;
+                        crate::updater::handle_check_updates_click(&handle).await;
                     });
                 }
                 "quit" => {
