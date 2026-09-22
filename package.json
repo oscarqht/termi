@@ -11,7 +11,10 @@
     "build": "vite build",
     "app:dev": "tauri dev",
     "app:build": "npm run build && tauri build",
-    "app:build:mac": "npm run build && tauri build --target aarch64-apple-darwin"
+    "app:build:mac": "npm run build && tauri build --target aarch64-apple-darwin",
+    "app:setup-permissions": "bash scripts/setup-macos-permissions.sh",
+    "app:sign:local": "bash scripts/sign-local.sh",
+    "app:export-cert": "bash scripts/export-apple-cert.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

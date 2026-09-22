@@ -17,6 +17,8 @@ pub fn run() {
             updater::get_update_status,
             updater::install_and_relaunch,
             updater::close_update_window,
+            tray::cmd_check_full_disk_access,
+            tray::cmd_open_full_disk_access_settings,
         ])
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -38,7 +40,21 @@ pub fn run() {
                         if let Err(e) = tray::setup_tray(&app_handle, server_url.clone()) {
                             eprintln!("[termi] Failed to setup tray: {e}");
                         }
-                        updater::start_background_updater(app_handle);
+                        updater::start_background_updater(app_handle.clone());
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            use tauri_plugin_notification::NotificationExt;
+                            if !tray::check_full_disk_access() {
+                                println!("[termi] Full Disk Access is not granted yet. Notifying user...");
+                                let _ = app_handle
+                                    .notification()
+                                    .builder()
+                                    .title("Termi Permissions")
+                                    .body("Termi needs Full Disk Access to avoid folder permission prompts in terminal sessions. Click the status bar icon to configure.")
+                                    .show();
+                            }
+                        }
                     }
                     Err(e) => {
                         eprintln!("[termi] Failed to start server: {e}");

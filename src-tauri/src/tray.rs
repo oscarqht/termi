@@ -40,6 +40,54 @@ fn copy_to_clipboard(text: &str) {
     }
 }
 
+pub fn check_full_disk_access() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let safari_path = std::path::Path::new(&home).join("Library/Safari");
+            if std::fs::read_dir(safari_path).is_ok() {
+                return true;
+            }
+        }
+        std::fs::read_dir("/Library/Application Support/com.apple.TCC").is_ok()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+#[tauri::command]
+pub fn cmd_check_full_disk_access() -> bool {
+    check_full_disk_access()
+}
+
+pub fn open_full_disk_access_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+            .spawn();
+
+        if let Ok(current_exe) = std::env::current_exe() {
+            if let Some(app_bundle) = current_exe.ancestors().find(|p| p.extension().map_or(false, |e| e == "app")) {
+                let _ = std::process::Command::new("open")
+                    .args(["-R", &app_bundle.to_string_lossy()])
+                    .spawn();
+            } else if std::path::Path::new("/Applications/Termi.app").exists() {
+                let _ = std::process::Command::new("open")
+                    .args(["-R", "/Applications/Termi.app"])
+                    .spawn();
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub fn cmd_open_full_disk_access_settings() {
+    open_full_disk_access_settings();
+}
+
 pub fn setup_tray(
     app: &AppHandle,
     server_url: String,
@@ -52,6 +100,18 @@ pub fn setup_tray(
     let open_item = MenuItem::with_id(app, "open_browser", "Open in Browser", true, None::<&str>)?;
     let copy_item = MenuItem::with_id(app, "copy_url", "Copy URL", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
+
+    #[cfg(target_os = "macos")]
+    let fda_granted = check_full_disk_access();
+    #[cfg(target_os = "macos")]
+    let fda_text = if fda_granted {
+        "✓ Full Disk Access Enabled"
+    } else {
+        "⚠️ Grant Full Disk Access..."
+    };
+    #[cfg(target_os = "macos")]
+    let fda_item = MenuItem::with_id(app, "full_disk_access", fda_text, true, None::<&str>)?;
+
     let autostart_item = CheckMenuItem::with_id(
         app,
         "toggle_autostart",
@@ -79,6 +139,23 @@ pub fn setup_tray(
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit Termi", true, None::<&str>)?;
 
+    #[cfg(target_os = "macos")]
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open_item,
+            &copy_item,
+            &sep1,
+            &fda_item,
+            &autostart_item,
+            &check_updates_item,
+            &version_item,
+            &sep2,
+            &quit_item,
+        ],
+    )?;
+
+    #[cfg(not(target_os = "macos"))]
     let menu = Menu::with_items(
         app,
         &[
@@ -111,6 +188,10 @@ pub fn setup_tray(
                 }
                 "copy_url" => {
                     copy_to_clipboard(&url_for_menu);
+                }
+                #[cfg(target_os = "macos")]
+                "full_disk_access" => {
+                    open_full_disk_access_settings();
                 }
                 "toggle_autostart" => {
                     let autolaunch = app_handle.autolaunch();

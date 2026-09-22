@@ -36,6 +36,25 @@ npm run app
   npm run app:build:mac
   ```
 
+### macOS Permissions & Full Disk Access (FDA)
+
+Terminal emulators require **Full Disk Access** on macOS to run commands in `~/Downloads`, `~/Documents`, and `~/Desktop` without recurring permission prompts.
+
+- **1-Click Setup Script:**
+  ```bash
+  npm run app:setup-permissions
+  ```
+  This opens System Settings directly to **Privacy & Security → Full Disk Access** and reveals `Termi.app` in Finder so you can enable it in two clicks.
+
+- **From the Tray Menu:**
+  Right-click the Termi status bar icon and click **⚠️ Grant Full Disk Access...**. Once granted, it dynamically displays **✓ Full Disk Access Enabled**.
+
+- **Free Personal Apple ID Signing ($0, no paid developer account):**
+  To ensure macOS remembers Full Disk Access across rebuilds and updates without resetting permissions:
+  ```bash
+  npm run app:sign:local
+  ```
+
 - **Build for Windows (`.exe` installer & portable):**
   ```bash
   npm run app:build:win

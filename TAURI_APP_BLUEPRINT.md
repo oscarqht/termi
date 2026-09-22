@@ -404,3 +404,18 @@ Follow these steps to convert any existing Web/Electron project to this architec
     ```bash
     xattr -cr /Applications/Termi.app
     ```
+
+### ⚠️ macOS Permissions (TCC): Repeated "Termi would like to access files in your Downloads folder"
+- **Root Cause**: macOS TCC protects user folders (`~/Downloads`, `~/Documents`, `~/Desktop`). When Termi is ad-hoc signed (`"-"`), its designated requirement is its binary hash (`cdhash`). Every build/update produces a different hash, causing macOS to treat the updated app as a new entity and revoke/reset previous permissions.
+- **Solution 1 (Full Disk Access)**: Grant Termi Full Disk Access to avoid folder prompts altogether:
+  ```bash
+  npm run app:setup-permissions
+  ```
+  Or right-click the Termi status bar icon and choose **⚠️ Grant Full Disk Access...**.
+- **Solution 2 (Persistent Updates with Free Personal Apple ID)**:
+  Sign with a free Personal Team Apple ID certificate ($0, no paid developer account needed):
+  ```bash
+  npm run app:sign:local
+  ```
+  This locks the code signing requirement to your Personal Team ID rather than the binary hash, so Full Disk Access and all permissions permanently persist across all updates!
+
