@@ -260,11 +260,18 @@ async fn handle_ws_socket(socket: WebSocket, session: Arc<Session>) {
     session.client_count.fetch_add(1, Ordering::Relaxed);
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
+    // Subscribe FIRST so we don't drop any outputs while preparing initial replay
+    let mut rx = session.tx.subscribe();
+
     // Replay buffered output to newly connected client
     let initial_data = {
         let b = session.buffer.read().await;
         b.to_string()
     };
+
+    // Drain any messages in rx that were already captured in the buffer snapshot
+    while rx.try_recv().is_ok() {}
+
     if !initial_data.is_empty() {
         let msg = serde_json::json!({
             "type": "output",
@@ -274,13 +281,22 @@ async fn handle_ws_socket(socket: WebSocket, session: Arc<Session>) {
         let _ = ws_sender.send(Message::Text(msg.into())).await;
     }
 
-    let mut rx = session.tx.subscribe();
-
     // Forward session PTY output to WS
     let mut send_task = tokio::spawn(async move {
-        while let Ok(msg) = rx.recv().await {
-            if ws_sender.send(Message::Text(msg.into())).await.is_err() {
-                break;
+        loop {
+            match rx.recv().await {
+                Ok(msg) => {
+                    if ws_sender.send(Message::Text(msg.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    eprintln!("[termi] WS broadcast lagged by {skipped} messages");
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    break;
+                }
             }
         }
     });

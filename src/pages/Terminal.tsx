@@ -501,13 +501,17 @@ export default function Terminal() {
       }
       hasConnectedOnceRef.current = true;
 
+      phaseRef.current = 'connected';
       setPhase('connected');
       const term = xtermRef.current;
-      if (term && fitAddonRef.current) {
-        try {
-          fitAddonRef.current.fit();
-          ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-        } catch {}
+      if (term) {
+        term.focus();
+        if (fitAddonRef.current) {
+          try {
+            fitAddonRef.current.fit();
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+          } catch {}
+        }
       }
     };
 
@@ -570,6 +574,7 @@ export default function Terminal() {
       term.open(container);
       fit.fit();
       xtermRef.current = term;
+      term.focus();
 
       const resizeObserver = new ResizeObserver(() => {
         fit.fit();
@@ -662,6 +667,8 @@ export default function Terminal() {
         ) {
           retryCountRef.current = 0;
           scheduleReconnect(true);
+        } else if (currentPhase === 'connected') {
+          xtermRef.current?.focus();
         }
       }
     };
@@ -979,6 +986,12 @@ export default function Terminal() {
   return (
     <div
       className="terminal-page"
+      onClick={(e) => {
+        const target = e.target as HTMLElement | null;
+        if (target && !target.closest('button, input, textarea, a, .modal-dialog, .floating-toolbar')) {
+          xtermRef.current?.focus();
+        }
+      }}
       style={
         isTouchDevice && viewportHeight
           ? {
@@ -1214,6 +1227,7 @@ export default function Terminal() {
       <div
         ref={containerRef}
         className={`xterm-container${dragActive ? ' drag-active' : ''}`}
+        onClick={() => xtermRef.current?.focus()}
       />
       {phase === 'connected' && isTouchDevice && (
         <MobileAccessoryBar
