@@ -44,8 +44,9 @@ impl OutputBuffer {
         self.total_len += s.len();
         self.chunks.push_back(s);
 
+        // Drop whole chunks from the front while total_len exceeds max_chars
         while let Some(front) = self.chunks.front() {
-            if self.total_len - front.len() >= self.max_chars {
+            if self.total_len.saturating_sub(front.len()) >= self.max_chars {
                 self.total_len -= front.len();
                 self.chunks.pop_front();
             } else {
@@ -53,19 +54,33 @@ impl OutputBuffer {
             }
         }
 
+        // If still over max_chars, trim the front chunk at a safe UTF-8 character boundary
         if self.total_len > self.max_chars {
             if let Some(front) = self.chunks.front_mut() {
                 let overflow = self.total_len - self.max_chars;
-                if overflow < front.len() {
-                    *front = front[overflow..].to_string();
-                    self.total_len = self.max_chars;
+                let trim_idx = front.ceil_char_boundary(overflow);
+                if trim_idx < front.len() {
+                    *front = front[trim_idx..].to_string();
+                    self.total_len -= trim_idx;
+                } else {
+                    self.total_len -= front.len();
+                    self.chunks.pop_front();
                 }
             }
         }
     }
 
     pub fn to_string(&self) -> String {
-        self.chunks.iter().cloned().collect()
+        let mut result = String::with_capacity(self.total_len);
+        for chunk in &self.chunks {
+            result.push_str(chunk);
+        }
+        result
+    }
+
+    #[cfg(test)]
+    pub fn total_len(&self) -> usize {
+        self.total_len
     }
 }
 
@@ -287,53 +302,68 @@ impl SessionManager {
         // Background thread reading output from PTY
         let session_for_read = session.clone();
         let tx_for_read = tx.clone();
+        let session_id_for_read = id.clone();
         std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            let mut pending_bytes = Vec::new();
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let mut combined = if pending_bytes.is_empty() {
-                            buf[..n].to_vec()
-                        } else {
-                            let mut v = std::mem::take(&mut pending_bytes);
-                            v.extend_from_slice(&buf[..n]);
-                            v
-                        };
+            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut buf = [0u8; 4096];
+                let mut pending_bytes = Vec::new();
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) => {
+                            eprintln!("[termi] PTY EOF reached for session {session_id_for_read}");
+                            break;
+                        }
+                        Ok(n) => {
+                            let mut combined = if pending_bytes.is_empty() {
+                                buf[..n].to_vec()
+                            } else {
+                                let mut v = std::mem::take(&mut pending_bytes);
+                                v.extend_from_slice(&buf[..n]);
+                                v
+                            };
 
-                        let valid_up_to = match std::str::from_utf8(&combined) {
-                            Ok(_) => combined.len(),
-                            Err(e) => {
-                                if e.error_len().is_none() {
-                                    // Incomplete multi-byte sequence at buffer boundary
-                                    e.valid_up_to()
-                                } else {
-                                    combined.len()
+                            let valid_up_to = match std::str::from_utf8(&combined) {
+                                Ok(_) => combined.len(),
+                                Err(e) => {
+                                    if e.error_len().is_none() {
+                                        // Incomplete multi-byte sequence at buffer boundary
+                                        e.valid_up_to()
+                                    } else {
+                                        combined.len()
+                                    }
+                                }
+                            };
+
+                            if valid_up_to < combined.len() {
+                                pending_bytes = combined.split_off(valid_up_to);
+                            }
+
+                            let text = String::from_utf8_lossy(&combined).to_string();
+                            if !text.is_empty() {
+                                let msg = serde_json::json!({
+                                    "type": "output",
+                                    "data": text
+                                })
+                                .to_string();
+                                {
+                                    let mut b = session_for_read.buffer.blocking_write();
+                                    b.write(text);
+                                    let _ = tx_for_read.send(msg);
                                 }
                             }
-                        };
-
-                        if valid_up_to < combined.len() {
-                            pending_bytes = combined.split_off(valid_up_to);
                         }
-
-                        let text = String::from_utf8_lossy(&combined).to_string();
-                        if !text.is_empty() {
-                            {
-                                let mut b = session_for_read.buffer.blocking_write();
-                                b.write(text.clone());
+                        Err(e) => {
+                            if e.kind() == std::io::ErrorKind::Interrupted {
+                                continue;
                             }
-                            let msg = serde_json::json!({
-                                "type": "output",
-                                "data": text
-                            })
-                            .to_string();
-                            let _ = tx_for_read.send(msg);
+                            eprintln!("[termi] PTY read error for session {session_id_for_read}: {e}");
+                            break;
                         }
                     }
-                    Err(_) => break,
                 }
+            }));
+            if let Err(panic_err) = res {
+                eprintln!("[termi] PTY reader thread panicked for session {session_id_for_read}: {panic_err:?}");
             }
         });
 
@@ -380,3 +410,55 @@ impl SessionManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_output_buffer_basic() {
+        let mut buf = OutputBuffer::new(10);
+        buf.write("hello".to_string());
+        assert_eq!(buf.to_string(), "hello");
+        assert_eq!(buf.total_len(), 5);
+
+        buf.write("world".to_string());
+        assert_eq!(buf.to_string(), "helloworld");
+        assert_eq!(buf.total_len(), 10);
+
+        buf.write("!".to_string());
+        // Dropped first chunk or trimmed safely to fit within max_chars
+        assert!(buf.total_len() <= 10);
+        assert!(buf.to_string().ends_with("world!"));
+    }
+
+    #[test]
+    fn test_output_buffer_multibyte_utf8_no_panic() {
+        // Test braille characters, emojis, Chinese characters, box drawing characters
+        let mut buf = OutputBuffer::new(10);
+        // "⣻" is 3 bytes (0xE2, 0xA3, 0xBB)
+        // "你好世界" is 12 bytes
+        buf.write("⣻".to_string());
+        buf.write("你好世界".to_string());
+        buf.write("●".to_string());
+        buf.write("🚀".to_string()); // 4 bytes
+
+        assert!(buf.total_len() <= 10);
+        let s = buf.to_string();
+        // S should be valid UTF-8 and end with the last written character
+        assert!(s.ends_with("🚀"));
+    }
+
+    #[test]
+    fn test_output_buffer_heavy_overflow() {
+        let mut buf = OutputBuffer::new(100);
+        for i in 0..10_000 {
+            buf.write(format!("line {i}: ⣻ spinner test 你好世界 ─│┌┐\n"));
+            assert!(buf.total_len() <= 100);
+        }
+        let output = buf.to_string();
+        assert!(!output.is_empty());
+        assert!(output.len() <= 100);
+    }
+}
+

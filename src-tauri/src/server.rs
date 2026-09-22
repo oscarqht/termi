@@ -260,25 +260,44 @@ async fn handle_ws_socket(socket: WebSocket, session: Arc<Session>) {
     session.client_count.fetch_add(1, Ordering::Relaxed);
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
-    // Subscribe FIRST so we don't drop any outputs while preparing initial replay
-    let mut rx = session.tx.subscribe();
-
-    // Replay buffered output to newly connected client
-    let initial_data = {
+    // Snapshot buffer and subscribe atomically under the read lock to prevent
+    // dropping any messages or sending duplicate replay text.
+    let (initial_data, mut rx) = {
         let b = session.buffer.read().await;
-        b.to_string()
+        (b.to_string(), session.tx.subscribe())
     };
 
-    // Drain any messages in rx that were already captured in the buffer snapshot
-    while rx.try_recv().is_ok() {}
-
+    // Replay buffered output to newly connected client in chunks if large
     if !initial_data.is_empty() {
-        let msg = serde_json::json!({
-            "type": "output",
-            "data": initial_data
-        })
-        .to_string();
-        let _ = ws_sender.send(Message::Text(msg.into())).await;
+        const CHUNK_SIZE: usize = 65536;
+        if initial_data.len() > CHUNK_SIZE {
+            let mut start = 0;
+            while start < initial_data.len() {
+                let target_end = (start + CHUNK_SIZE).min(initial_data.len());
+                let end = initial_data.ceil_char_boundary(target_end);
+                let chunk = &initial_data[start..end];
+                let msg = serde_json::json!({
+                    "type": "output",
+                    "data": chunk
+                })
+                .to_string();
+                if ws_sender.send(Message::Text(msg.into())).await.is_err() {
+                    session.client_count.fetch_sub(1, Ordering::Relaxed);
+                    return;
+                }
+                start = end;
+            }
+        } else {
+            let msg = serde_json::json!({
+                "type": "output",
+                "data": initial_data
+            })
+            .to_string();
+            if ws_sender.send(Message::Text(msg.into())).await.is_err() {
+                session.client_count.fetch_sub(1, Ordering::Relaxed);
+                return;
+            }
+        }
     }
 
     // Forward session PTY output to WS
