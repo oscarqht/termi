@@ -9,6 +9,7 @@ interface MobileAccessoryBarProps {
   onToggleKeyboard: () => void;
   collapsed: boolean;
   setCollapsed: (updater: (prev: boolean) => boolean) => void;
+  onOpenEditor?: () => void;
 }
 
 export const MobileAccessoryBar: FC<MobileAccessoryBarProps> = ({
@@ -20,6 +21,7 @@ export const MobileAccessoryBar: FC<MobileAccessoryBarProps> = ({
   onToggleKeyboard,
   collapsed,
   setCollapsed,
+  onOpenEditor,
 }) => {
   // Prevent button taps from blurring the xterm helper textarea and closing the virtual keyboard
   const preventBlur = (e: MouseEvent | TouchEvent) => {
@@ -75,6 +77,24 @@ export const MobileAccessoryBar: FC<MobileAccessoryBarProps> = ({
               <line x1="7" y1="16" x2="17" y2="16" />
             </svg>
           </button>
+
+          {/* Text editor compose button */}
+          {onOpenEditor && (
+            <button
+              type="button"
+              className="mobile-key-btn icon"
+              onMouseDown={preventBlur}
+              onTouchStart={preventBlur}
+              onClick={onOpenEditor}
+              aria-label="Open text editor"
+              title="Open text editor"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+            </button>
+          )}
 
           {/* ESC */}
           <button
