@@ -72,8 +72,11 @@ for target_w, target_h, out_path in sizes:
 # 3. Browser favicon and Windows ICO
 fav = app_icon.resize((64, 64), Image.Resampling.LANCZOS)
 fav.save('public/favicon.png')
+app_icon_256 = app_icon.resize((256, 256), Image.Resampling.LANCZOS)
+app_icon_256.save('public/app-icon.png')
 if os.path.exists('dist'):
     fav.save('dist/favicon.png')
+    app_icon_256.save('dist/app-icon.png')
 
 app_icon.save('assets/icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
 

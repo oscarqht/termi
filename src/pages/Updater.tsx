@@ -60,12 +60,6 @@ const themeTokens = {
   dark: {
     bg: '#0f172a',
     text: '#f8fafc',
-    headerBorder: '#1e293b',
-    iconBadgeBg: '#1e293b',
-    iconBadgeBorder: '#334155',
-    iconBadgeColor: '#38bdf8',
-    title: '#f1f5f9',
-    subtitle: '#64748b',
     stateTitle: '#f8fafc',
     stateDesc: '#94a3b8',
     highlightText: '#e2e8f0',
@@ -105,12 +99,6 @@ const themeTokens = {
   light: {
     bg: '#ffffff',
     text: '#0f172a',
-    headerBorder: '#e2e8f0',
-    iconBadgeBg: '#f1f5f9',
-    iconBadgeBorder: '#e2e8f0',
-    iconBadgeColor: '#0284c7',
-    title: '#0f172a',
-    subtitle: '#64748b',
     stateTitle: '#0f172a',
     stateDesc: '#475569',
     highlightText: '#0f172a',
@@ -274,44 +262,6 @@ export default function Updater() {
         transition: 'background-color 0.2s ease, color 0.2s ease',
       }}
     >
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          paddingBottom: '16px',
-          borderBottom: `1px solid ${c.headerBorder}`,
-          transition: 'border-color 0.2s ease',
-        }}
-      >
-        <div
-          style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '10px',
-            backgroundColor: c.iconBadgeBg,
-            border: `1px solid ${c.iconBadgeBorder}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: c.iconBadgeColor,
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="4 17 10 11 4 5"></polyline>
-            <line x1="12" y1="19" x2="20" y2="19"></line>
-          </svg>
-        </div>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: c.title }}>
-            Termi Software Update
-          </h1>
-          <span style={{ fontSize: '12px', color: c.subtitle }}>Cross-platform Terminal Manager</span>
-        </div>
-      </div>
-
       <div
         style={{
           flex: 1,

@@ -853,7 +853,10 @@ export default function Terminal() {
   if (phase === 'confirm' || phase === 'error') {
     return (
       <main className="page confirm-page">
-        <h1>Open a terminal here?</h1>
+        <div className="header-brand">
+          <img src="/app-icon.png" alt="termi" className="header-app-icon" />
+          <h1>Open a terminal here?</h1>
+        </div>
         <dl className="confirm-details">
           <dt>Working directory</dt>
           <dd>
@@ -997,6 +1000,7 @@ export default function Terminal() {
           aria-label={`Session: ${currentTitle}`}
           disabled={phase !== 'connected'}
         >
+          <img src="/app-icon.png" alt="" className="toolbar-app-icon" />
           <span className="toolbar-session-title-text">{currentTitle}</span>
         </button>
         {phase === 'connected' && (
