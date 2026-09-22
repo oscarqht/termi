@@ -223,7 +223,7 @@ pub fn setup_tray(
         .or_else(|| app.default_window_icon().cloned());
 
     let mut builder = TrayIconBuilder::with_id("termi-tray")
-        .icon_as_template(true)
+        .icon_as_template(false)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .tooltip("Termi Web Terminal")
