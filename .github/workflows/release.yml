@@ -48,6 +48,22 @@ jobs:
             node scripts/bump-version.js
           fi
 
+      - name: Create draft release
+        if: steps.version_step.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version_step.outputs.tag }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Pre-creating draft release for $TAG..."
+            gh release create "$TAG" \
+              --draft \
+              --title "Termi $TAG" \
+              --notes "See assets below to install Termi."
+          else
+            echo "Release $TAG already exists."
+          fi
+
   build:
     name: Build (${{ matrix.platform }}-${{ matrix.arch }})
     needs: prepare
