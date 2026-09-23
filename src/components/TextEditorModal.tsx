@@ -1,4 +1,14 @@
-import { useEffect, useRef, useState, type FC, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FC,
+  type KeyboardEvent,
+  type DragEvent,
+  type ClipboardEvent,
+  type ChangeEvent,
+} from 'react';
+import { uploadSessionFiles, shellQuote } from '../uploadUtils';
 
 interface TextEditorModalProps {
   isOpen: boolean;
@@ -18,7 +28,14 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
   sessionId,
 }) => {
   const [text, setText] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const errorTimeoutRef = useRef<number | null>(null);
+
   const draftKey = getDraftKey(sessionId);
 
   // Load draft on open or sessionId change
@@ -34,14 +51,86 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
+    } else {
+      setDragActive(false);
+      setUploadError(null);
     }
   }, [isOpen, draftKey]);
+
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutRef.current !== null) {
+        window.clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const showError = (msg: string) => {
+    setUploadError(msg);
+    if (errorTimeoutRef.current !== null) {
+      window.clearTimeout(errorTimeoutRef.current);
+    }
+    errorTimeoutRef.current = window.setTimeout(() => {
+      setUploadError(null);
+      errorTimeoutRef.current = null;
+    }, 4000);
+  };
 
   const handleTextChange = (val: string) => {
     setText(val);
     try {
       window.localStorage.setItem(draftKey, val);
     } catch {}
+  };
+
+  const insertTextAtCursor = (insertedText: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      const next = text ? `${text} ${insertedText}` : insertedText;
+      handleTextChange(next);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentVal = textarea.value;
+    const before = currentVal.slice(0, start);
+    const after = currentVal.slice(end);
+
+    const needsSpaceBefore = before.length > 0 && !/\s$/.test(before);
+    const needsSpaceAfter = after.length > 0 && !/^\s/.test(after);
+    const prefix = needsSpaceBefore ? ' ' : '';
+    const suffix = needsSpaceAfter ? ' ' : '';
+    const toInsert = `${prefix}${insertedText}${suffix}`;
+
+    const updated = before + toInsert + after;
+    handleTextChange(updated);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const newPos = start + toInsert.length;
+      textarea.selectionStart = newPos;
+      textarea.selectionEnd = newPos;
+    });
+  };
+
+  const handleUploadFiles = async (files: File[]) => {
+    if (!sessionId) {
+      showError('No active terminal session');
+      return;
+    }
+    if (files.length === 0) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const paths = await uploadSessionFiles(sessionId, files);
+      const inserted = paths.map(shellQuote).join(' ');
+      insertTextAtCursor(inserted);
+    } catch (err) {
+      showError((err as Error).message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleClear = () => {
@@ -149,6 +238,56 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
     }
   };
 
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragActive(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const files = [...(e.dataTransfer?.files ?? [])];
+    if (files.length > 0) {
+      handleUploadFiles(files);
+    }
+  };
+
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = [...(e.clipboardData?.items ?? [])];
+    const files: File[] = [];
+    for (const item of items) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleUploadFiles(files);
+    }
+  };
+
+  const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = [...(e.target.files ?? [])];
+    e.target.value = '';
+    if (files.length > 0) {
+      handleUploadFiles(files);
+    }
+  };
+
   if (!isOpen) return null;
 
   const linesCount = text ? text.split('\n').length : 0;
@@ -184,20 +323,82 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
           </button>
         </div>
 
-        <div className="modal-body text-editor-body">
+        <div
+          className={`modal-body text-editor-body${dragActive ? ' drag-active' : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <textarea
             ref={textareaRef}
-            className="text-editor-textarea"
+            className={`text-editor-textarea${dragActive ? ' drag-active' : ''}`}
             value={text}
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Type or paste long text, scripts, or commands here..."
             spellCheck={false}
           />
+          {dragActive && (
+            <div className="text-editor-dropzone-overlay">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" aria-hidden="true">
+                <path
+                  d="M17.5 9.5 9.75 17.25a3.5 3.5 0 1 1-4.95-4.95l8.4-8.4a2.5 2.5 0 1 1 3.54 3.54l-8.13 8.13a1.5 1.5 0 1 1-2.12-2.12l6.72-6.72"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>Drop files here to attach</span>
+            </div>
+          )}
         </div>
 
         <div className="modal-footer text-editor-footer">
           <div className="text-editor-footer-left">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileInputChange}
+              multiple
+              style={{ display: 'none' }}
+            />
+            <button
+              type="button"
+              className="secondary small text-editor-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || !sessionId}
+              title={sessionId ? 'Attach files or images' : 'No active terminal session'}
+              aria-label="Attach files or images"
+            >
+              {uploading ? (
+                <svg viewBox="0 0 24 24" width="14" height="14" className="spin" aria-hidden="true">
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeDasharray="42"
+                    strokeDashoffset="14"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                  <path
+                    d="M17.5 9.5 9.75 17.25a3.5 3.5 0 1 1-4.95-4.95l8.4-8.4a2.5 2.5 0 1 1 3.54 3.54l-8.13 8.13a1.5 1.5 0 1 1-2.12-2.12l6.72-6.72"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+              <span>{uploading ? 'Uploading...' : 'Attach'}</span>
+            </button>
             <span className="text-editor-stats">
               {linesCount} {linesCount === 1 ? 'line' : 'lines'}, {charsCount} {charsCount === 1 ? 'char' : 'chars'}
             </span>
@@ -211,6 +412,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
                 Clear
               </button>
             )}
+            {uploadError && <span className="text-editor-upload-error">{uploadError}</span>}
           </div>
           <div className="text-editor-footer-right">
             <button

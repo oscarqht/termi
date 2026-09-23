@@ -6,7 +6,8 @@ import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
 import { TextEditorModal } from '../components/TextEditorModal';
 import type { SessionInfo } from './Home';
-import { isSameCwd, normalizePath } from '../pathUtils';
+import { isSameCwd } from '../pathUtils';
+import { uploadSessionFiles, shellQuote } from '../uploadUtils';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'exited' | 'error';
 
@@ -122,6 +123,8 @@ export default function Terminal() {
   const [sessionTitle, setSessionTitle] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const editorOpenRef = useRef(editorOpen);
+  editorOpenRef.current = editorOpen;
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
@@ -359,10 +362,6 @@ export default function Terminal() {
     }, 4000);
   }
 
-  function shellQuote(value: string) {
-    return `'${value.replace(/'/g, "'\\''")}'`;
-  }
-
   function sendInput(data: string) {
     if (phaseRef.current !== 'connected') return;
     const ws = wsRef.current;
@@ -385,39 +384,12 @@ export default function Terminal() {
     }
   }
 
-  function formatImageName(file: File, index = 0): string {
-    const ext = file.type.split('/')[1] || 'png';
-    const cleanExt = ext === 'jpeg' ? 'jpg' : ext;
-    if (file.name && file.name !== 'image.png' && file.name !== 'blob' && !file.name.startsWith('image.')) {
-      return file.name;
-    }
-    const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    const suffix = index > 0 ? `-${index + 1}` : '';
-    return `pasted-image-${timestamp}${suffix}.${cleanExt}`;
-  }
-
   async function uploadAndInsertFiles(files: File[]) {
     const sessionId = sessionIdRef.current;
     if (!sessionId || files.length === 0) return;
     setUploading(true);
     try {
-      const paths: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const name = formatImageName(file, i);
-        const res = await fetch(
-          `/api/sessions/${sessionId}/upload?name=${encodeURIComponent(name)}`,
-          { method: 'POST', body: file },
-        );
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? `Failed to upload ${name}`);
-        }
-        const data = await res.json();
-        paths.push(data.path as string);
-      }
+      const paths = await uploadSessionFiles(sessionId, files);
       sendInput(paths.map(shellQuote).join(' '));
     } catch (err) {
       const msg = (err as Error).message;
@@ -754,6 +726,7 @@ export default function Terminal() {
       if (files.length) uploadAndInsertFiles(files);
     }
     function onPaste(e: ClipboardEvent) {
+      if (editorOpenRef.current || (e.target as HTMLElement)?.closest?.('.text-editor-dialog')) return;
       const items = [...(e.clipboardData?.items ?? [])];
       const imageFiles: File[] = [];
       for (const item of items) {
