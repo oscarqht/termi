@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
 import { TextEditorModal } from '../components/TextEditorModal';
+import { SavedPromptsModal } from '../components/SavedPromptsModal';
 import type { SessionInfo } from './Home';
 import { isSameCwd } from '../pathUtils';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
@@ -126,6 +127,9 @@ export default function Terminal() {
   const [editorOpen, setEditorOpen] = useState(false);
   const editorOpenRef = useRef(editorOpen);
   editorOpenRef.current = editorOpen;
+  const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
+  const savedPromptsOpenRef = useRef(savedPromptsOpen);
+  savedPromptsOpenRef.current = savedPromptsOpen;
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
@@ -718,6 +722,13 @@ export default function Terminal() {
           setEditorOpen((prev) => !prev);
         }
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (phaseRef.current === 'connected') {
+          setSavedPromptsOpen((prev) => !prev);
+        }
+      }
     };
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => {
@@ -743,7 +754,13 @@ export default function Terminal() {
       if (files.length) uploadAndInsertFiles(files);
     }
     function onPaste(e: ClipboardEvent) {
-      if (editorOpenRef.current || (e.target as HTMLElement)?.closest?.('.text-editor-dialog')) return;
+      if (
+        editorOpenRef.current ||
+        savedPromptsOpenRef.current ||
+        (e.target as HTMLElement)?.closest?.('.text-editor-dialog, .saved-prompts-dialog')
+      ) {
+        return;
+      }
       const items = [...(e.clipboardData?.items ?? [])];
       const imageFiles: File[] = [];
       for (const item of items) {
@@ -1235,6 +1252,28 @@ export default function Terminal() {
         {phase === 'connected' && (
           <button
             className="icon-button"
+            onClick={() => setSavedPromptsOpen(true)}
+            title="Saved prompts (⌘⇧P / Ctrl+Shift+P)"
+            aria-label="Saved prompts"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+        )}
+        {phase === 'connected' && (
+          <button
+            className="icon-button"
             onClick={handleOpenSettings}
             title="Session settings"
             aria-label="Session settings"
@@ -1421,6 +1460,7 @@ export default function Terminal() {
           collapsed={barCollapsed}
           setCollapsed={setBarCollapsed}
           onOpenEditor={() => setEditorOpen(true)}
+          onOpenPrompts={() => setSavedPromptsOpen(true)}
         />
       )}
       <TextEditorModal
@@ -1431,6 +1471,16 @@ export default function Terminal() {
         }}
         onSend={handleSendEditorText}
         sessionId={sessionIdRef.current}
+      />
+      <SavedPromptsModal
+        isOpen={savedPromptsOpen}
+        onClose={() => {
+          setSavedPromptsOpen(false);
+          xtermRef.current?.focus();
+        }}
+        onSelectPrompt={(promptText) => {
+          handleSendEditorText(promptText, false);
+        }}
       />
     </div>
   );

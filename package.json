@@ -9,6 +9,7 @@
     "tauri": "tauri",
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test test/*.test.js",
     "app:dev": "tauri dev",
     "app:build": "npm run build && tauri build",
     "app:build:mac": "npm run build && tauri build --target aarch64-apple-darwin",
