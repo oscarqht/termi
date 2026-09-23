@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
 } from 'react';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
+import { SavedPromptsModal } from './SavedPromptsModal';
 
 interface TextEditorModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [promptsOpen, setPromptsOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -164,6 +166,13 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
     if (e.key === 'Escape') {
       e.preventDefault();
       onClose();
+      return;
+    }
+
+    // Cmd+Shift+P (Mac) or Ctrl+Shift+P: Saved Prompts
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+      e.preventDefault();
+      setPromptsOpen(true);
       return;
     }
 
@@ -399,6 +408,18 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
               )}
               <span>{uploading ? 'Uploading...' : 'Attach'}</span>
             </button>
+            <button
+              type="button"
+              className="secondary small text-editor-prompts-btn"
+              onClick={() => setPromptsOpen(true)}
+              title={`Saved Prompts (${navigator.platform.toUpperCase().includes('MAC') ? '⌘⇧P' : 'Ctrl+Shift+P'})`}
+              aria-label="Saved Prompts"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Prompts</span>
+            </button>
             <span className="text-editor-stats">
               {linesCount} {linesCount === 1 ? 'line' : 'lines'}, {charsCount} {charsCount === 1 ? 'char' : 'chars'}
             </span>
@@ -442,6 +463,11 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
           </div>
         </div>
       </div>
+      <SavedPromptsModal
+        isOpen={promptsOpen}
+        onClose={() => setPromptsOpen(false)}
+        onSelectPrompt={(content) => insertTextAtCursor(content)}
+      />
     </div>
   );
 };

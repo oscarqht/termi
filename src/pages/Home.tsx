@@ -5,6 +5,12 @@ import {
   loadCommonCmds,
   saveCommonCmds,
 } from '../commonCmds';
+import {
+  type SavedPrompt,
+  loadSavedPrompts,
+  saveSavedPrompts,
+} from '../savedPrompts';
+import { SavedPromptsModal } from '../components/SavedPromptsModal';
 
 export type SessionInfo = {
   id: string;
@@ -52,6 +58,58 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
   const [recentCmds, setRecentCmds] = useState<string[]>([]);
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>(() => loadSavedPrompts());
+  const [savedPromptsModalOpen, setSavedPromptsModalOpen] = useState(false);
+  const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
+  const [newPromptTitle, setNewPromptTitle] = useState('');
+  const [newPromptContent, setNewPromptContent] = useState('');
+
+  function addSavedPromptFromHome() {
+    const titleTrim = newPromptTitle.trim();
+    const contentTrim = newPromptContent.trim();
+    if (!titleTrim && !contentTrim) return;
+
+    const newPrompt: SavedPrompt = {
+      id: `prompt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      title: titleTrim || 'Untitled Prompt',
+      content: newPromptContent,
+    };
+
+    setSavedPrompts((prev) => {
+      const next = [newPrompt, ...prev];
+      saveSavedPrompts(next);
+      return next;
+    });
+    setNewPromptTitle('');
+    setNewPromptContent('');
+  }
+
+  function removeSavedPromptFromHome(id: string) {
+    setSavedPrompts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      saveSavedPrompts(next);
+      return next;
+    });
+  }
+
+  async function copySavedPromptFromHome(id: string, content: string) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = content;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopiedPromptId(id);
+      setTimeout(() => setCopiedPromptId(null), 1500);
+    } catch {}
+  }
 
   useEffect(() => {
     document.title = 'termi';
@@ -417,6 +475,102 @@ export default function Home() {
           </li>
         ))}
       </ul>
+
+      <section className="saved-prompts-home-section" style={{ marginTop: '2.5rem' }}>
+        <div className="saved-prompts-home-header">
+          <div>
+            <h2>Saved prompts ({savedPrompts.length})</h2>
+            <p className="saved-prompts-desc">
+              Reusable prompt templates accessible across all terminal sessions and the text editor.
+            </p>
+          </div>
+          <div className="saved-prompts-header-actions">
+            <button
+              type="button"
+              className="secondary small"
+              onClick={() => setSavedPromptsModalOpen(true)}
+            >
+              Manage prompts
+            </button>
+          </div>
+        </div>
+
+        <div className="saved-prompts-home-list">
+          {savedPrompts.map((p) => (
+            <div key={p.id} className="saved-prompt-home-item">
+              <div className="saved-prompt-home-item-header">
+                <span className="saved-prompt-home-item-title">{p.title}</span>
+                <div className="saved-prompt-home-item-actions">
+                  <button
+                    type="button"
+                    className={`icon-button small${copiedPromptId === p.id ? ' copied' : ''}`}
+                    onClick={() => copySavedPromptFromHome(p.id, p.content)}
+                    title={copiedPromptId === p.id ? 'Copied!' : 'Copy prompt text'}
+                    aria-label={copiedPromptId === p.id ? 'Copied' : 'Copy prompt text'}
+                  >
+                    {copiedPromptId === p.id ? (
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="5" y="5" width="8" height="8" rx="1.5" />
+                        <path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="common-cmd-remove-btn"
+                    onClick={() => removeSavedPromptFromHome(p.id)}
+                    title="Remove prompt"
+                    aria-label={`Remove ${p.title}`}
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+              <div className="saved-prompt-home-preview">{p.content}</div>
+            </div>
+          ))}
+          {savedPrompts.length === 0 && (
+            <p className="muted">No saved prompts configured.</p>
+          )}
+        </div>
+
+        <div className="add-saved-prompt-home-row">
+          <input
+            value={newPromptTitle}
+            onChange={(e) => setNewPromptTitle(e.target.value)}
+            placeholder="Prompt title (e.g. Code Review)"
+            className="add-saved-prompt-title-input"
+          />
+          <textarea
+            value={newPromptContent}
+            onChange={(e) => setNewPromptContent(e.target.value)}
+            placeholder="Prompt content / instructions..."
+            rows={2}
+            className="add-saved-prompt-content-input"
+          />
+          <button
+            type="button"
+            className="secondary"
+            onClick={addSavedPromptFromHome}
+            disabled={!newPromptTitle.trim() && !newPromptContent.trim()}
+          >
+            + Add prompt
+          </button>
+        </div>
+      </section>
+
+      <SavedPromptsModal
+        isOpen={savedPromptsModalOpen}
+        onClose={() => {
+          setSavedPromptsModalOpen(false);
+          setSavedPrompts(loadSavedPrompts());
+        }}
+        initialManageMode={true}
+      />
     </main>
   );
 }
