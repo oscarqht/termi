@@ -375,14 +375,14 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
             />
             <button
               type="button"
-              className="secondary small text-editor-attach-btn"
+              className="secondary text-editor-attach-btn"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading || !sessionId}
               title={sessionId ? 'Attach files or images' : 'No active terminal session'}
               aria-label="Attach files or images"
             >
               {uploading ? (
-                <svg viewBox="0 0 24 24" width="14" height="14" className="spin" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" className="spin" aria-hidden="true">
                   <circle
                     cx="12"
                     cy="12"
@@ -396,7 +396,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
                   />
                 </svg>
               ) : (
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
                   <path
                     d="M17.5 9.5 9.75 17.25a3.5 3.5 0 1 1-4.95-4.95l8.4-8.4a2.5 2.5 0 1 1 3.54 3.54l-8.13 8.13a1.5 1.5 0 1 1-2.12-2.12l6.72-6.72"
                     stroke="currentColor"
@@ -410,12 +410,12 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
             </button>
             <button
               type="button"
-              className="secondary small text-editor-prompts-btn"
+              className="secondary text-editor-prompts-btn"
               onClick={() => setPromptsOpen(true)}
               title={`Saved Prompts (${navigator.platform.toUpperCase().includes('MAC') ? '⌘⇧P' : 'Ctrl+Shift+P'})`}
               aria-label="Saved Prompts"
             >
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
               </svg>
               <span>Prompts</span>
@@ -426,7 +426,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
             {text.length > 0 && (
               <button
                 type="button"
-                className="secondary small text-editor-clear-btn"
+                className="secondary text-editor-clear-btn"
                 onClick={handleClear}
                 title="Clear editor contents"
               >

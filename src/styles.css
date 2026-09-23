@@ -839,12 +839,11 @@ button.danger:hover {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.text-editor-attach-btn {
+.text-editor-attach-btn,
+.text-editor-prompts-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.78rem;
+  gap: 0.45rem;
 }
 
 .text-editor-upload-error {
@@ -853,8 +852,7 @@ button.danger:hover {
 }
 
 .text-editor-clear-btn {
-  padding: 0.25rem 0.6rem;
-  font-size: 0.78rem;
+  /* Inherits standard button sizing */
 }
 
 .text-editor-footer-right {
