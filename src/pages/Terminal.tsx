@@ -8,6 +8,7 @@ import { TextEditorModal } from '../components/TextEditorModal';
 import type { SessionInfo } from './Home';
 import { isSameCwd } from '../pathUtils';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
+import { CopyableCode, copyTextToClipboard } from '../components/CopyableCode';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'exited' | 'error';
 
@@ -140,12 +141,33 @@ export default function Terminal() {
       document.title = 'termi';
     };
   }, [cwd, sessionTitle]);
-  const [cmds] = useState(initial.cmds);
+  const [cmds, setCmds] = useState<string[]>(initial.cmds);
   const [cmd, setCmd] = useState(() => {
     const lastChoice = loadLastInitialCmd();
     if (lastChoice && initial.cmds.includes(lastChoice)) return lastChoice;
     return initial.cmds[0] ?? '';
   });
+  const [activeRadioIndex, setActiveRadioIndex] = useState<number | null>(() => {
+    const lastChoice = loadLastInitialCmd();
+    if (lastChoice && initial.cmds.includes(lastChoice)) {
+      return initial.cmds.indexOf(lastChoice);
+    }
+    return initial.cmds.length > 0 ? 0 : null;
+  });
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [infoToast, setInfoToast] = useState<string | null>(null);
+  const infoToastTimeoutRef = useRef<number | null>(null);
+  const initialExplanationMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    const baseMap = getCommonCmdExplanationMap();
+    initial.cmds.forEach((cmdStr, idx) => {
+      if (baseMap[cmdStr]) {
+        map[idx] = baseMap[cmdStr];
+      }
+    });
+    return map;
+  }, []);
+
   const [phase, setPhase] = useState<Phase>(
     initial.session || initial.cmds.length === 0 || initial.start ? 'connecting' : 'confirm',
   );
@@ -372,17 +394,12 @@ export default function Terminal() {
 
   function handleSendEditorText(text: string, execute: boolean) {
     if (phaseRef.current !== 'connected') return;
-    const term = xtermRef.current;
-    if (term) {
-      term.paste(text);
-      if (execute) {
-        sendInput('\r');
-      }
-      term.focus();
-    } else {
-      sendInput(execute ? text + '\r' : text);
-    }
+    const normalized = text.replace(/\r?\n/g, '\r');
+    const payload = execute ? normalized + '\r' : normalized;
+    sendInput(payload);
+    xtermRef.current?.focus();
   }
+
 
   async function uploadAndInsertFiles(files: File[]) {
     const sessionId = sessionIdRef.current;
@@ -815,6 +832,90 @@ export default function Terminal() {
     window.open(`/term?${params.toString()}`, '_blank');
   }
 
+  function showInfoToast(msg: string) {
+    if (infoToastTimeoutRef.current !== null) {
+      window.clearTimeout(infoToastTimeoutRef.current);
+    }
+    setInfoToast(msg);
+    infoToastTimeoutRef.current = window.setTimeout(() => {
+      setInfoToast(null);
+      infoToastTimeoutRef.current = null;
+    }, 2500);
+  }
+
+  function handleCmdInputChange(newVal: string) {
+    setCmd(newVal);
+    if (activeRadioIndex !== null && activeRadioIndex >= 0 && activeRadioIndex < cmds.length) {
+      setCmds((prev) => {
+        const next = [...prev];
+        next[activeRadioIndex] = newVal;
+        return next;
+      });
+    } else {
+      const idx = cmds.indexOf(newVal);
+      if (idx !== -1) {
+        setActiveRadioIndex(idx);
+      } else if (!newVal.trim()) {
+        setActiveRadioIndex(-1);
+      } else {
+        setActiveRadioIndex(null);
+      }
+    }
+  }
+
+  async function handleUpdateAndCopyUrl() {
+    const url = new URL(window.location.href);
+    if (cwd.trim()) {
+      url.searchParams.set('cwd', cwd.trim());
+    } else {
+      url.searchParams.delete('cwd');
+    }
+
+    url.searchParams.delete('cmd');
+    url.searchParams.delete('start');
+
+    const nextCmds: string[] = [];
+    if (activeRadioIndex !== null && activeRadioIndex >= 0 && activeRadioIndex < cmds.length) {
+      for (let i = 0; i < cmds.length; i++) {
+        const val = (i === activeRadioIndex ? cmd : cmds[i]).trim();
+        if (val && !nextCmds.includes(val)) {
+          nextCmds.push(val);
+        }
+      }
+    } else {
+      for (const c of cmds) {
+        const val = c.trim();
+        if (val && !nextCmds.includes(val)) {
+          nextCmds.push(val);
+        }
+      }
+      if (cmd.trim() && !nextCmds.includes(cmd.trim())) {
+        nextCmds.push(cmd.trim());
+      }
+    }
+
+    for (const c of nextCmds) {
+      url.searchParams.append('cmd', c);
+    }
+
+    if (cmd.trim()) {
+      rememberInitialCmd(cmd.trim());
+    }
+
+    const newUrlString = url.toString();
+    window.history.replaceState(null, '', newUrlString);
+    setCmds(nextCmds);
+
+    const ok = await copyTextToClipboard(newUrlString);
+    if (ok) {
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+      showInfoToast('URL updated and copied to clipboard!');
+    } else {
+      showInfoToast('Page URL updated!');
+    }
+  }
+
   function handleOpenSettings() {
     setDraftTitle(sessionTitle);
     setSettingsOpen(true);
@@ -872,7 +973,11 @@ export default function Terminal() {
         <dl className="confirm-details">
           <dt>Working directory</dt>
           <dd>
-            <code>{cwd || '(home directory)'}</code>
+            {cwd ? (
+              <CopyableCode code={cwd} />
+            ) : (
+              <code>(home directory)</code>
+            )}
           </dd>
         </dl>
         {phase === 'error' && (
@@ -892,26 +997,48 @@ export default function Terminal() {
             }}
           />
         </label>
+        <label className="confirm-cmd" style={{ marginTop: '0.85rem' }}>
+          Initial command
+          <input
+            value={cmd}
+            placeholder="e.g. npm run dev (or leave blank for shell)"
+            onChange={(e) => handleCmdInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                startTerminal();
+              }
+            }}
+          />
+        </label>
         {cmds.length > 0 && (
           <div className="cmd-choices">
             <span className="cmd-list-label">Choose an initial command</span>
-            {cmds.map((c) => (
-              <label className="cmd-choice" key={c}>
-                <input
-                  type="radio"
-                  name="cmd-choice"
-                  checked={cmd === c}
-                  onChange={() => {
-                    setCmd(c);
-                    rememberInitialCmd(c);
-                  }}
-                />
-                <code>{c}</code>
-                {explanationMap[c] && (
-                  <span className="cmd-explanation"> — {explanationMap[c]}</span>
-                )}
-              </label>
-            ))}
+            {cmds.map((c, i) => {
+              const explanation = explanationMap[c] || initialExplanationMap[i];
+              return (
+                <label className="cmd-choice" key={i}>
+                  <input
+                    type="radio"
+                    name="cmd-choice"
+                    checked={cmd === c}
+                    onChange={() => {
+                      setCmd(c);
+                      setActiveRadioIndex(i);
+                      rememberInitialCmd(c);
+                    }}
+                  />
+                  <div className="cmd-choice-info">
+                    <CopyableCode code={c} />
+                    {explanation && (
+                      <span className="cmd-explanation" title={explanation}>
+                        {explanation}
+                      </span>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
             <label className="cmd-choice">
               <input
                 type="radio"
@@ -919,6 +1046,7 @@ export default function Terminal() {
                 checked={cmd === ''}
                 onChange={() => {
                   setCmd('');
+                  setActiveRadioIndex(-1);
                 }}
               />
               <span className="cmd-no-cmd">(no command)</span>
@@ -928,6 +1056,9 @@ export default function Terminal() {
         <div className="form-actions">
           <button type="button" onClick={() => startTerminal()}>
             Start terminal
+          </button>
+          <button type="button" className="secondary" onClick={handleUpdateAndCopyUrl}>
+            {copiedUrl ? '✓ URL copied!' : 'Copy URL'}
           </button>
           <button type="button" className="secondary" onClick={startInNewTab}>
             Start in new tab
@@ -956,12 +1087,17 @@ export default function Terminal() {
                     {s.title ? (
                       <>
                         <span className="session-title">{s.title}</span>
-                        <code className="session-cwd">{s.cwd}</code>
+                        <CopyableCode code={s.cwd} className="session-cwd" />
                       </>
                     ) : (
-                      <code>{s.cwd}</code>
+                      <CopyableCode code={s.cwd} />
                     )}
-                    {s.cmd && <span className="cmd"> — {s.cmd}</span>}
+                    {s.cmd && (
+                      <span className="cmd">
+                        {' — '}
+                        <CopyableCode code={s.cmd} />
+                      </span>
+                    )}
                   </div>
                   <div className="session-actions">
                     <button
@@ -984,6 +1120,23 @@ export default function Terminal() {
             </ul>
           )}
         </section>
+        {infoToast && (
+          <div className="terminal-toast terminal-toast-info" role="status">
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+            </svg>
+            <span>{infoToast}</span>
+          </div>
+        )}
       </main>
     );
   }

@@ -5,6 +5,7 @@ import {
   loadCommonCmds,
   saveCommonCmds,
 } from '../commonCmds';
+import { CopyableCode } from '../components/CopyableCode';
 
 export type SessionInfo = {
   id: string;
@@ -318,9 +319,9 @@ export default function Home() {
                     onChange={() => toggleCommonCmd(c.id)}
                   />
                   <div className="common-cmd-info">
-                    <code>{c.cmd}</code>
+                    <CopyableCode code={c.cmd} />
                     {c.explanation && (
-                      <span className="common-cmd-explanation">{c.explanation}</span>
+                      <span className="common-cmd-explanation" title={c.explanation}>{c.explanation}</span>
                     )}
                   </div>
                 </label>
@@ -403,12 +404,17 @@ export default function Home() {
               {s.title ? (
                 <>
                   <span className="session-title">{s.title}</span>
-                  <code className="session-cwd">{s.cwd}</code>
+                  <CopyableCode code={s.cwd} className="session-cwd" />
                 </>
               ) : (
-                <code>{s.cwd}</code>
+                <CopyableCode code={s.cwd} />
               )}
-              {s.cmd && <span className="cmd"> — {s.cmd}</span>}
+              {s.cmd && (
+                <span className="cmd">
+                  {' — '}
+                  <CopyableCode code={s.cmd} />
+                </span>
+              )}
             </div>
             <div className="session-actions">
               <button type="button" className="secondary small" onClick={() => resumeSession(s.id, s.cwd)}>Resume</button>
