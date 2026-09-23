@@ -1014,14 +1014,15 @@ export default function Terminal() {
             }}
           />
         </label>
-        <label className="confirm-cmd" style={{ marginTop: '0.85rem' }}>
+        <label className="confirm-cmd">
           Initial command
-          <input
+          <textarea
             value={cmd}
             placeholder="e.g. npm run dev (or leave blank for shell)"
+            rows={3}
             onChange={(e) => handleCmdInputChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 startTerminal();
               }

@@ -159,7 +159,8 @@ body {
 }
 
 .new-terminal-form input,
-.confirm-cwd input {
+.confirm-cwd input,
+.confirm-cmd textarea {
   padding: 0.5rem;
   border-radius: 6px;
   border: 1px solid var(--border-input);
@@ -358,13 +359,32 @@ button.secondary:hover {
   margin: 0;
 }
 
-.confirm-cwd {
+.confirm-cwd,
+.confirm-cmd {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
   margin: 1rem 0;
   color: var(--text-secondary);
   font-size: 0.85rem;
+  width: 100%;
+}
+
+.confirm-cmd textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 0.6rem 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.confirm-cwd input:focus,
+.confirm-cmd textarea:focus {
+  outline: none;
+  border-color: var(--btn-primary-bg);
 }
 
 .error {
