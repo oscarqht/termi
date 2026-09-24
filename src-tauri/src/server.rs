@@ -13,6 +13,8 @@ use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
 
+use tauri::Manager;
+
 use crate::session::{default_cwd, Session, SessionInfo, SessionManager};
 
 #[derive(RustEmbed)]
@@ -21,6 +23,7 @@ struct Assets;
 
 pub struct AppState {
     pub session_manager: Arc<SessionManager>,
+    pub app_handle: tauri::AppHandle,
 }
 
 pub fn resolve_host() -> String {
@@ -183,6 +186,37 @@ async fn choose_folder() -> Json<serde_json::Value> {
     match folder {
         Some(handle) => Json(serde_json::json!({ "cwd": handle.path().to_string_lossy() })),
         None => Json(serde_json::json!({ "cwd": null })),
+    }
+}
+
+async fn get_updater_status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let update_state = state.app_handle.state::<crate::updater::UpdateState>();
+    let mgr = update_state.0.lock().await;
+    let current_version = state.app_handle.package_info().version.to_string();
+    Json(serde_json::json!({
+        "current_version": current_version,
+        "status": mgr.status,
+    }))
+}
+
+async fn check_updater(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let handle = state.app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::updater::check_and_download(&handle, false).await;
+    });
+    Json(serde_json::json!({ "success": true }))
+}
+
+async fn install_updater(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let handle = state.app_handle.clone();
+    match crate::updater::install_and_relaunch_inner(&handle).await {
+        Ok(_) => Ok(Json(serde_json::json!({ "success": true }))),
+        Err(err) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": err })),
+        )),
     }
 }
 
@@ -381,6 +415,7 @@ async fn static_or_spa_fallback(uri: axum::http::Uri) -> axum::response::Respons
 }
 
 pub async fn start_server(
+    app_handle: tauri::AppHandle,
     session_manager: Arc<SessionManager>,
 ) -> Result<(String, u16, tokio::task::JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>> {
     let host = resolve_host();
@@ -420,7 +455,10 @@ pub async fn start_server(
     let server_url = format!("http://{host}:{bound_port}");
     println!("[termi] Server listening on {server_url}");
 
-    let state = Arc::new(AppState { session_manager });
+    let state = Arc::new(AppState {
+        session_manager,
+        app_handle,
+    });
 
     let app = Router::new()
         .route("/api/sessions", get(list_sessions).post(create_session))
@@ -433,6 +471,9 @@ pub async fn start_server(
         .route("/api/sessions/{id}/upload", post(upload_file))
         .route("/api/default-cwd", get(get_default_cwd))
         .route("/api/choose-folder", post(choose_folder))
+        .route("/api/updater/status", get(get_updater_status))
+        .route("/api/updater/check", post(check_updater))
+        .route("/api/updater/install", post(install_updater))
         .route("/ws/pty", get(ws_handler))
         .fallback(static_or_spa_fallback)
         .layer(CorsLayer::permissive())

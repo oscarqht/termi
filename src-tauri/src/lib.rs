@@ -35,7 +35,7 @@ pub fn run() {
             let sm = session_manager.clone();
 
             tauri::async_runtime::spawn(async move {
-                match server::start_server(sm).await {
+                match server::start_server(app_handle.clone(), sm).await {
                     Ok((server_url, _port, _handle)) => {
                         if let Err(e) = tray::setup_tray(&app_handle, server_url.clone()) {
                             eprintln!("[termi] Failed to setup tray: {e}");
