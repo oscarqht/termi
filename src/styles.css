@@ -941,12 +941,6 @@ button.danger:hover {
   flex-wrap: wrap;
 }
 
-.text-editor-stats {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
 .text-editor-attach-btn,
 .text-editor-prompts-btn {
   display: inline-flex;

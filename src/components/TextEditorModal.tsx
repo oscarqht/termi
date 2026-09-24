@@ -299,9 +299,6 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
 
   if (!isOpen) return null;
 
-  const linesCount = text ? text.split('\n').length : 0;
-  const charsCount = text.length;
-
   return (
     <div
       className="modal-backdrop text-editor-backdrop"
@@ -420,9 +417,6 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
               </svg>
               <span>Prompts</span>
             </button>
-            <span className="text-editor-stats">
-              {linesCount} {linesCount === 1 ? 'line' : 'lines'}, {charsCount} {charsCount === 1 ? 'char' : 'chars'}
-            </span>
             {text.length > 0 && (
               <button
                 type="button"
