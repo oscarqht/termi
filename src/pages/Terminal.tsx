@@ -1102,20 +1102,19 @@ export default function Terminal() {
                 <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
                   <div className="session-info">
                     <span className="dot" />
-                    {s.title ? (
-                      <>
-                        <span className="session-title">{s.title}</span>
-                        <CopyableCode code={s.cwd} className="session-cwd" />
-                      </>
-                    ) : (
-                      <CopyableCode code={s.cwd} />
-                    )}
-                    {s.cmd && (
-                      <span className="cmd">
-                        {' — '}
-                        <CopyableCode code={s.cmd} />
-                      </span>
-                    )}
+                    <div className="session-details">
+                      {s.title?.trim() ? (
+                        <div className="session-title" title={s.title.trim()}>{s.title.trim()}</div>
+                      ) : null}
+                      <div className="session-cwd">
+                        <CopyableCode code={s.cwd} />
+                      </div>
+                      {s.cmd?.trim() ? (
+                        <div className="session-cmd">
+                          <CopyableCode code={s.cmd.trim()} />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <div className="session-actions">
                     <button

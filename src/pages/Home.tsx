@@ -460,23 +460,22 @@ export default function Home() {
       {sessions.length === 0 && <p className="muted">No terminals running.</p>}
       <ul className="session-list">
         {sessions.map((s) => (
-<li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
+          <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
             <div className="session-info">
               <span className="dot" />
-              {s.title ? (
-                <>
-                  <span className="session-title">{s.title}</span>
-                  <CopyableCode code={s.cwd} className="session-cwd" />
-                </>
-              ) : (
-                <CopyableCode code={s.cwd} />
-              )}
-              {s.cmd && (
-                <span className="cmd">
-                  {' — '}
-                  <CopyableCode code={s.cmd} />
-                </span>
-              )}
+              <div className="session-details">
+                {s.title?.trim() ? (
+                  <div className="session-title" title={s.title.trim()}>{s.title.trim()}</div>
+                ) : null}
+                <div className="session-cwd">
+                  <CopyableCode code={s.cwd} />
+                </div>
+                {s.cmd?.trim() ? (
+                  <div className="session-cmd">
+                    <CopyableCode code={s.cmd.trim()} />
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="session-actions">
               <button type="button" className="secondary small" onClick={() => resumeSession(s.id, s.cwd)}>Resume</button>
