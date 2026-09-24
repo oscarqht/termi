@@ -99,166 +99,10 @@ pub fn close_update_window_inner(app: &AppHandle) {
     }
 }
 
-pub async fn check_and_download_silent(app: &AppHandle) {
-    let state = app.state::<UpdateState>();
-    {
-        let mgr = state.0.lock().await;
-        if mgr.is_checking_or_downloading {
-            return;
-        }
-        if matches!(mgr.status, UpdateStatus::Downloaded { .. }) {
-            return;
-        }
+pub async fn check_and_download(app: &AppHandle, show_window: bool) {
+    if show_window {
+        let _ = open_or_focus_updater_window(app);
     }
-
-    {
-        let mut mgr = state.0.lock().await;
-        mgr.is_checking_or_downloading = true;
-        mgr.status = UpdateStatus::Checking;
-    }
-    let _ = app.emit("termi://update-status", UpdateStatus::Checking);
-
-    let updater = match app.updater() {
-        Ok(u) => u,
-        Err(e) => {
-            eprintln!("[termi] Failed to initialize updater: {e}");
-            let mut mgr = state.0.lock().await;
-            mgr.is_checking_or_downloading = false;
-            return;
-        }
-    };
-
-    println!("[termi] Auto-updater: checking for updates...");
-    match updater.check().await {
-        Ok(Some(update)) => {
-            println!("[termi] Auto-updater: new version available: v{}", update.version);
-            let version = update.version.clone();
-            let current_version = update.current_version.clone();
-            let body = update.body.clone();
-
-            {
-                let mut mgr = state.0.lock().await;
-                mgr.status = UpdateStatus::Downloading {
-                    version: version.clone(),
-                    current_version: current_version.clone(),
-                    body: body.clone(),
-                    downloaded: 0,
-                    total: None,
-                    percent: 0,
-                };
-            }
-            let _ = app.emit("termi://update-status", {
-                let mgr = state.0.lock().await;
-                mgr.status.clone()
-            });
-
-            let mut downloaded = 0u64;
-            let mut last_emit = std::time::Instant::now();
-            let mut last_pct = 0u32;
-            let app_clone = app.clone();
-            let version_for_cb = version.clone();
-            let curr_for_cb = current_version.clone();
-            let body_for_cb = body.clone();
-
-            let res = update
-                .download(
-                    move |chunk_length, content_length| {
-                        downloaded += chunk_length as u64;
-                        let pct = if let Some(tot) = content_length {
-                            if tot > 0 {
-                                ((downloaded as f64 / tot as f64) * 100.0) as u32
-                            } else {
-                                0
-                            }
-                        } else {
-                            0
-                        };
-
-                        if pct != last_pct || last_emit.elapsed() >= Duration::from_millis(300) {
-                            last_pct = pct;
-                            last_emit = std::time::Instant::now();
-                            let status = UpdateStatus::Downloading {
-                                version: version_for_cb.clone(),
-                                current_version: curr_for_cb.clone(),
-                                body: body_for_cb.clone(),
-                                downloaded,
-                                total: content_length,
-                                percent: pct,
-                            };
-                            let _ = app_clone.emit("termi://update-status", &status);
-                        }
-                    },
-                    || {
-                        println!("[termi] Auto-updater: download complete.");
-                    },
-                )
-                .await;
-
-            match res {
-                Ok(bytes) => {
-                    println!("[termi] Auto-updater: downloaded {} bytes successfully", bytes.len());
-                    let new_status = UpdateStatus::Downloaded {
-                        version: version.clone(),
-                        current_version: current_version.clone(),
-                        body: body.clone(),
-                    };
-
-                    {
-                        let mut mgr = state.0.lock().await;
-                        mgr.pending_update = Some(update);
-                        mgr.downloaded_bytes = Some(bytes);
-                        mgr.status = new_status.clone();
-                        if let Some(tray_item) = &mgr.tray_item {
-                            let _ = tray_item.set_text(format!("Restart to Update to v{version}"));
-                        }
-                    }
-
-                    let _ = app.emit("termi://update-status", &new_status);
-
-                    let notif_body = format!(
-                        "Version v{} is downloaded. Click here or open the status bar menu to restart.",
-                        version
-                    );
-                    let _ = app
-                        .notification()
-                        .builder()
-                        .title("Termi Update Ready")
-                        .body(notif_body)
-                        .show();
-                }
-                Err(e) => {
-                    eprintln!("[termi] Auto-updater download failed: {e}");
-                    let mut mgr = state.0.lock().await;
-                    mgr.status = UpdateStatus::Idle;
-                }
-            }
-        }
-        Ok(None) => {
-            println!("[termi] Auto-updater: Termi is up to date.");
-            let status = UpdateStatus::UpToDate {
-                current_version: app.package_info().version.to_string(),
-            };
-            let mut mgr = state.0.lock().await;
-            mgr.status = status.clone();
-            let _ = app.emit("termi://update-status", &status);
-        }
-        Err(e) => {
-            eprintln!("[termi] Auto-updater check error: {e}");
-            let err_status = UpdateStatus::Error {
-                message: format!("Check failed: {e}"),
-            };
-            let mut mgr = state.0.lock().await;
-            mgr.status = err_status.clone();
-            let _ = app.emit("termi://update-status", &err_status);
-        }
-    }
-
-    let mut mgr = state.0.lock().await;
-    mgr.is_checking_or_downloading = false;
-}
-
-pub async fn check_and_download_manual(app: &AppHandle) {
-    let _ = open_or_focus_updater_window(app);
 
     let state = app.state::<UpdateState>();
     {
@@ -294,10 +138,10 @@ pub async fn check_and_download_manual(app: &AppHandle) {
         }
     };
 
-    println!("[termi] Manual update: checking for updates...");
+    println!("[termi] Updater: checking for updates...");
     match updater.check().await {
         Ok(Some(update)) => {
-            println!("[termi] Manual update: new version available: v{}", update.version);
+            println!("[termi] Updater: new version available: v{}", update.version);
             let version = update.version.clone();
             let current_version = update.current_version.clone();
             let body = update.body.clone();
@@ -355,14 +199,14 @@ pub async fn check_and_download_manual(app: &AppHandle) {
                         }
                     },
                     || {
-                        println!("[termi] Manual update: download complete.");
+                        println!("[termi] Updater: download complete.");
                     },
                 )
                 .await;
 
             match res {
                 Ok(bytes) => {
-                    println!("[termi] Manual update: downloaded {} bytes successfully", bytes.len());
+                    println!("[termi] Updater: downloaded {} bytes successfully", bytes.len());
                     let new_status = UpdateStatus::Downloaded {
                         version: version.clone(),
                         current_version: current_version.clone(),
@@ -393,6 +237,7 @@ pub async fn check_and_download_manual(app: &AppHandle) {
                         .show();
                 }
                 Err(e) => {
+                    eprintln!("[termi] Updater download failed: {e}");
                     let err_status = UpdateStatus::Error {
                         message: format!("Download failed: {e}"),
                     };
@@ -403,7 +248,7 @@ pub async fn check_and_download_manual(app: &AppHandle) {
             }
         }
         Ok(None) => {
-            println!("[termi] Manual update: you are on the latest version.");
+            println!("[termi] Updater: Termi is up to date.");
             let status = UpdateStatus::UpToDate {
                 current_version: app.package_info().version.to_string(),
             };
@@ -412,7 +257,7 @@ pub async fn check_and_download_manual(app: &AppHandle) {
             let _ = app.emit("termi://update-status", &status);
         }
         Err(e) => {
-            eprintln!("[termi] Manual update check error: {e}");
+            eprintln!("[termi] Updater check error: {e}");
             let err_status = UpdateStatus::Error {
                 message: format!("Check failed: {e}"),
             };
@@ -424,6 +269,14 @@ pub async fn check_and_download_manual(app: &AppHandle) {
 
     let mut mgr = state.0.lock().await;
     mgr.is_checking_or_downloading = false;
+}
+
+pub async fn check_and_download_silent(app: &AppHandle) {
+    check_and_download(app, false).await;
+}
+
+pub async fn check_and_download_manual(app: &AppHandle) {
+    check_and_download(app, true).await;
 }
 
 pub async fn handle_check_updates_click(app: &AppHandle) {
@@ -464,7 +317,12 @@ pub async fn install_and_relaunch_inner(app: &AppHandle) -> Result<(), String> {
         match update.install(bytes) {
             Ok(_) => {
                 println!("[termi] Update installed successfully! Relaunching app...");
-                app.restart();
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    handle.restart();
+                });
+                Ok(())
             }
             Err(e) => {
                 let err_msg = format!("Failed to install update: {e}");

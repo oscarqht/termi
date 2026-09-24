@@ -12,6 +12,7 @@ import {
   saveSavedPrompts,
 } from '../savedPrompts';
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
+import HeaderUpdater from '../components/HeaderUpdater';
 
 export type SessionInfo = {
   id: string;
@@ -286,9 +287,12 @@ export default function Home() {
 
   return (
     <main className="page">
-      <div className="header-brand">
-        <img src="/app-icon.png" alt="termi" className="header-app-icon" />
-        <h1>termi</h1>
+      <div className="header-row">
+        <div className="header-brand">
+          <img src="/app-icon.png" alt="termi" className="header-app-icon" />
+          <h1>termi</h1>
+        </div>
+        <HeaderUpdater />
       </div>
       <p className="subtitle">Open a browser tab backed by a real local terminal.</p>
 
