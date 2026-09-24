@@ -331,8 +331,7 @@ jobs:
           releaseBody: 'See assets below to install Termi.'
           releaseDraft: true
           prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          includeUpdaterJson: false
           retryAttempts: 3
           args: ${{ matrix.args }}
 
@@ -345,6 +344,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/generate-updater-json.js "${{ needs.prepare.outputs.tag }}"
       - env:
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
