@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
-import { TextEditorModal } from '../components/TextEditorModal';
+import { TextEditorModal, type TextEditorModalHandle } from '../components/TextEditorModal';
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
 import type { SessionInfo } from './Home';
 import { isSameCwd } from '../pathUtils';
@@ -125,9 +125,12 @@ export default function Terminal() {
   const [cwd, setCwd] = useState(initial.cwd);
   const [sessionTitle, setSessionTitle] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
   const [editorOpen, setEditorOpen] = useState(false);
   const editorOpenRef = useRef(editorOpen);
   editorOpenRef.current = editorOpen;
+  const textEditorRef = useRef<TextEditorModalHandle>(null);
   const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
   const savedPromptsOpenRef = useRef(savedPromptsOpen);
   savedPromptsOpenRef.current = savedPromptsOpen;
@@ -516,7 +519,11 @@ export default function Terminal() {
       setPhase('connected');
       const term = xtermRef.current;
       if (term) {
-        term.focus();
+        if (editorOpenRef.current) {
+          textEditorRef.current?.focus();
+        } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+          term.focus();
+        }
         if (fitAddonRef.current) {
           try {
             fitAddonRef.current.fit();
@@ -677,6 +684,9 @@ export default function Terminal() {
   useEffect(() => {
     const handleWakeup = () => {
       if (document.visibilityState === 'visible' && !isExplicitExitRef.current) {
+        if (editorOpenRef.current) {
+          textEditorRef.current?.focus();
+        }
         const currentPhase = phaseRef.current;
         const ws = wsRef.current;
         const isSocketClosed = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
@@ -688,7 +698,11 @@ export default function Terminal() {
           retryCountRef.current = 0;
           scheduleReconnect(true);
         } else if (currentPhase === 'connected') {
-          xtermRef.current?.focus();
+          if (editorOpenRef.current) {
+            textEditorRef.current?.focus();
+          } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+            xtermRef.current?.focus();
+          }
         }
       }
     };
@@ -1173,6 +1187,7 @@ export default function Terminal() {
     <div
       className="terminal-page"
       onClick={(e) => {
+        if (editorOpenRef.current || savedPromptsOpenRef.current || settingsOpenRef.current) return;
         const target = e.target as HTMLElement | null;
         if (target && !target.closest('button, input, textarea, a, .modal-dialog, .floating-toolbar')) {
           xtermRef.current?.focus();
@@ -1458,7 +1473,11 @@ export default function Terminal() {
       <div
         ref={containerRef}
         className={`xterm-container${dragActive ? ' drag-active' : ''}`}
-        onClick={() => xtermRef.current?.focus()}
+        onClick={() => {
+          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+            xtermRef.current?.focus();
+          }
+        }}
       />
       {phase === 'connected' && isTouchDevice && (
         <MobileAccessoryBar
@@ -1475,6 +1494,7 @@ export default function Terminal() {
         />
       )}
       <TextEditorModal
+        ref={textEditorRef}
         isOpen={editorOpen}
         onClose={() => {
           setEditorOpen(false);

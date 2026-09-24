@@ -3,7 +3,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type FC,
+  useImperativeHandle,
+  forwardRef,
   type KeyboardEvent,
   type DragEvent,
   type ClipboardEvent,
@@ -20,7 +21,11 @@ import {
 import { getCaretCoordinates } from '../caretPosition';
 import { getActiveSlashQuery, applySlashPrompt } from '../slashCommandUtils';
 
-interface TextEditorModalProps {
+export interface TextEditorModalHandle {
+  focus: () => void;
+}
+
+export interface TextEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSend: (text: string, execute: boolean) => void;
@@ -31,12 +36,12 @@ function getDraftKey(sessionId: string | null): string {
   return `termi:draft:${sessionId || 'default'}`;
 }
 
-export const TextEditorModal: FC<TextEditorModalProps> = ({
+export const TextEditorModal = forwardRef<TextEditorModalHandle, TextEditorModalProps>(({
   isOpen,
   onClose,
   onSend,
   sessionId,
-}) => {
+}, ref) => {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -81,6 +86,42 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
       dismissedSlashIndexRef.current = null;
     }
   }, [isOpen, draftKey]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => {
+        if (!promptsOpen) {
+          textareaRef.current?.focus();
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+          });
+        }
+      },
+    }),
+    [promptsOpen],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleWindowFocus = () => {
+      if (document.visibilityState !== 'hidden' && !promptsOpen) {
+        textareaRef.current?.focus();
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleWindowFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleWindowFocus);
+    };
+  }, [isOpen, promptsOpen]);
 
   useEffect(() => {
     return subscribeSavedPrompts(setSavedPrompts);
@@ -727,10 +768,15 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
         onClose={() => {
           setPromptsOpen(false);
           setPromptsManageMode(false);
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus();
+          });
         }}
         onSelectPrompt={(content) => insertTextAtCursor(content)}
         initialManageMode={promptsManageMode}
       />
     </div>
   );
-};
+});
+
+TextEditorModal.displayName = 'TextEditorModal';
