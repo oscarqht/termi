@@ -115,10 +115,12 @@ export const TextEditorModal = forwardRef<TextEditorModalHandle, TextEditorModal
     };
 
     window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('pageshow', handleWindowFocus);
     document.addEventListener('visibilitychange', handleWindowFocus);
 
     return () => {
       window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('pageshow', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleWindowFocus);
     };
   }, [isOpen, promptsOpen]);

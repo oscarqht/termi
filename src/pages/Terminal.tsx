@@ -523,6 +523,11 @@ export default function Terminal() {
           textEditorRef.current?.focus();
         } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
           term.focus();
+          requestAnimationFrame(() => {
+            if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+              term.focus();
+            }
+          });
         }
         if (fitAddonRef.current) {
           try {
@@ -592,7 +597,16 @@ export default function Terminal() {
       term.open(container);
       fit.fit();
       xtermRef.current = term;
-      term.focus();
+      if (editorOpenRef.current) {
+        textEditorRef.current?.focus();
+      } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+        term.focus();
+        requestAnimationFrame(() => {
+          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+            term.focus();
+          }
+        });
+      }
 
       touchScrollCleanupRef.current?.();
       touchScrollCleanupRef.current = setupTerminalTouchScroll({
@@ -682,11 +696,23 @@ export default function Terminal() {
   }, []);
 
   useEffect(() => {
+    const focusActiveTarget = () => {
+      if (document.visibilityState === 'hidden' || isExplicitExitRef.current) return;
+      if (editorOpenRef.current) {
+        textEditorRef.current?.focus();
+      } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+        xtermRef.current?.focus();
+        requestAnimationFrame(() => {
+          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+            xtermRef.current?.focus();
+          }
+        });
+      }
+    };
+
     const handleWakeup = () => {
       if (document.visibilityState === 'visible' && !isExplicitExitRef.current) {
-        if (editorOpenRef.current) {
-          textEditorRef.current?.focus();
-        }
+        focusActiveTarget();
         const currentPhase = phaseRef.current;
         const ws = wsRef.current;
         const isSocketClosed = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
@@ -697,18 +723,13 @@ export default function Terminal() {
         ) {
           retryCountRef.current = 0;
           scheduleReconnect(true);
-        } else if (currentPhase === 'connected') {
-          if (editorOpenRef.current) {
-            textEditorRef.current?.focus();
-          } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
-            xtermRef.current?.focus();
-          }
         }
       }
     };
 
     const handleOnline = () => {
       if (!isExplicitExitRef.current) {
+        focusActiveTarget();
         retryCountRef.current = 0;
         scheduleReconnect(true);
       }
@@ -716,11 +737,13 @@ export default function Terminal() {
 
     document.addEventListener('visibilitychange', handleWakeup);
     window.addEventListener('focus', handleWakeup);
+    window.addEventListener('pageshow', handleWakeup);
     window.addEventListener('online', handleOnline);
 
     return () => {
       document.removeEventListener('visibilitychange', handleWakeup);
       window.removeEventListener('focus', handleWakeup);
+      window.removeEventListener('pageshow', handleWakeup);
       window.removeEventListener('online', handleOnline);
     };
   }, []);
