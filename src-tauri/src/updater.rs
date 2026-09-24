@@ -99,7 +99,7 @@ pub fn close_update_window_inner(app: &AppHandle) {
     }
 }
 
-pub async fn check_and_download(app: &AppHandle, show_window: bool) {
+pub async fn check_and_download(app: &AppHandle, show_window: bool, force: bool) {
     if show_window {
         let _ = open_or_focus_updater_window(app);
     }
@@ -107,7 +107,7 @@ pub async fn check_and_download(app: &AppHandle, show_window: bool) {
     let state = app.state::<UpdateState>();
     {
         let mgr = state.0.lock().await;
-        if matches!(mgr.status, UpdateStatus::Downloaded { .. }) {
+        if !force && matches!(mgr.status, UpdateStatus::Downloaded { .. }) {
             let _ = app.emit("termi://update-status", &mgr.status);
             return;
         }
@@ -253,7 +253,12 @@ pub async fn check_and_download(app: &AppHandle, show_window: bool) {
                 current_version: app.package_info().version.to_string(),
             };
             let mut mgr = state.0.lock().await;
+            mgr.pending_update = None;
+            mgr.downloaded_bytes = None;
             mgr.status = status.clone();
+            if let Some(tray_item) = &mgr.tray_item {
+                let _ = tray_item.set_text("Check for Updates...");
+            }
             let _ = app.emit("termi://update-status", &status);
         }
         Err(e) => {
@@ -272,11 +277,11 @@ pub async fn check_and_download(app: &AppHandle, show_window: bool) {
 }
 
 pub async fn check_and_download_silent(app: &AppHandle) {
-    check_and_download(app, false).await;
+    check_and_download(app, false, false).await;
 }
 
 pub async fn check_and_download_manual(app: &AppHandle) {
-    check_and_download(app, true).await;
+    check_and_download(app, true, true).await;
 }
 
 pub async fn handle_check_updates_click(app: &AppHandle) {

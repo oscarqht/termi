@@ -265,6 +265,13 @@ export default function HeaderUpdater() {
                   </button>
                   <button
                     type="button"
+                    className="secondary small"
+                    onClick={handleCheckNow}
+                  >
+                    Check again
+                  </button>
+                  <button
+                    type="button"
                     className="primary small updater-install-btn"
                     onClick={handleInstall}
                   >

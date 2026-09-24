@@ -612,6 +612,24 @@ export default function Updater() {
               Later
             </button>
             <button
+              onClick={handleCheckAgain}
+              disabled={isInstalling}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: `1px solid ${c.btnSecondaryBorder}`,
+                outline: 'none',
+                backgroundColor: c.btnSecondaryBg,
+                color: c.btnSecondaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Check Again
+            </button>
+            <button
               onClick={handleInstallAndRelaunch}
               disabled={isInstalling}
               style={{
@@ -665,6 +683,80 @@ export default function Updater() {
               }}
             >
               Check Again
+            </button>
+          </>
+        ) : status.status === 'UpToDate' ? (
+          <>
+            <button
+              onClick={handleClose}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: `1px solid ${c.btnSecondaryBorder}`,
+                outline: 'none',
+                backgroundColor: c.btnSecondaryBg,
+                color: c.btnSecondaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Close
+            </button>
+            <button
+              onClick={handleCheckAgain}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: 'none',
+                outline: 'none',
+                backgroundColor: c.btnPrimaryBg,
+                color: c.btnPrimaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Check Again
+            </button>
+          </>
+        ) : status.status === 'Idle' ? (
+          <>
+            <button
+              onClick={handleClose}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: `1px solid ${c.btnSecondaryBorder}`,
+                outline: 'none',
+                backgroundColor: c.btnSecondaryBg,
+                color: c.btnSecondaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Close
+            </button>
+            <button
+              onClick={handleCheckAgain}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                border: 'none',
+                outline: 'none',
+                backgroundColor: c.btnPrimaryBg,
+                color: c.btnPrimaryText,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              Check for Updates
             </button>
           </>
         ) : status.status === 'Downloading' ? (

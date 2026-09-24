@@ -202,7 +202,7 @@ async fn get_updater_status(State(state): State<Arc<AppState>>) -> Json<serde_js
 async fn check_updater(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let handle = state.app_handle.clone();
     tauri::async_runtime::spawn(async move {
-        crate::updater::check_and_download(&handle, false).await;
+        crate::updater::check_and_download(&handle, false, true).await;
     });
     Json(serde_json::json!({ "success": true }))
 }

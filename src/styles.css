@@ -2364,9 +2364,11 @@ button.common-cmd-remove-btn:hover {
 .updater-actions-row {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   width: 100%;
   margin-top: 8px;
+  flex-wrap: wrap;
 }
 
 .updater-install-btn {
