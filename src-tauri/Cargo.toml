@@ -1,6 +1,6 @@
 [package]
 name = "termi"
-version = "0.33.0"
+version = "0.34.0"
 description = "A lightweight mobile-friendly web terminal manager"
 authors = ["oscarqht"]
 edition = "2021"
