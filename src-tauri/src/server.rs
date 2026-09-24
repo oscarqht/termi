@@ -157,8 +157,11 @@ async fn create_session(
 
     let cmd = body.cmd.unwrap_or_default();
     let title = body.title.unwrap_or_default();
-    match state.session_manager.create(resolved_cwd, cmd, title).await {
-        Ok(session) => Ok(Json(session.get_info())),
+    match state.session_manager.create(resolved_cwd.clone(), cmd, title).await {
+        Ok(session) => {
+            crate::recent_cwds::add_recent_cwd(&resolved_cwd).await;
+            Ok(Json(session.get_info()))
+        }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e })),
@@ -178,14 +181,76 @@ async fn get_default_cwd() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "cwd": default_cwd() }))
 }
 
+#[derive(Deserialize, Default)]
+pub struct CwdBody {
+    pub cwd: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+pub struct DeleteCwdQuery {
+    pub cwd: Option<String>,
+}
+
+async fn get_recent_cwds() -> Json<serde_json::Value> {
+    let cwds = crate::recent_cwds::load_recent_cwds().await;
+    Json(serde_json::json!({
+        "cwds": cwds,
+        "defaultCwd": default_cwd(),
+    }))
+}
+
+async fn add_recent_cwd_handler(
+    Json(body): Json<CwdBody>,
+) -> Json<serde_json::Value> {
+    let target = body.cwd.unwrap_or_default();
+    let cwds = crate::recent_cwds::add_recent_cwd(&target).await;
+    Json(serde_json::json!({ "cwds": cwds }))
+}
+
+async fn delete_recent_cwd_handler(
+    Query(query): Query<DeleteCwdQuery>,
+    body_bytes: axum::body::Bytes,
+) -> Json<serde_json::Value> {
+    let mut target = query.cwd.unwrap_or_default();
+    if target.is_empty() && !body_bytes.is_empty() {
+        if let Ok(val) = serde_json::from_slice::<CwdBody>(&body_bytes) {
+            if let Some(c) = val.cwd {
+                target = c;
+            }
+        }
+    }
+    let cwds = crate::recent_cwds::remove_recent_cwd(&target).await;
+    Json(serde_json::json!({ "cwds": cwds }))
+}
+
 async fn choose_folder() -> Json<serde_json::Value> {
     let folder = rfd::AsyncFileDialog::new()
         .set_title("Select working directory")
         .pick_folder()
         .await;
     match folder {
-        Some(handle) => Json(serde_json::json!({ "cwd": handle.path().to_string_lossy() })),
+        Some(handle) => {
+            let path_str = handle.path().to_string_lossy().to_string();
+            crate::recent_cwds::add_recent_cwd(&path_str).await;
+            Json(serde_json::json!({ "cwd": path_str }))
+        }
         None => Json(serde_json::json!({ "cwd": null })),
+    }
+}
+
+async fn get_saved_prompts_handler() -> Json<Vec<crate::prompts::SavedPrompt>> {
+    Json(crate::prompts::load_saved_prompts().await)
+}
+
+async fn save_saved_prompts_handler(
+    Json(body): Json<Vec<crate::prompts::SavedPrompt>>,
+) -> Result<Json<Vec<crate::prompts::SavedPrompt>>, (StatusCode, Json<serde_json::Value>)> {
+    match crate::prompts::save_saved_prompts(&body).await {
+        Ok(_) => Ok(Json(body)),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to save prompts: {e}") })),
+        )),
     }
 }
 
@@ -470,7 +535,17 @@ pub async fn start_server(
         )
         .route("/api/sessions/{id}/upload", post(upload_file))
         .route("/api/default-cwd", get(get_default_cwd))
+        .route(
+            "/api/recent-cwds",
+            get(get_recent_cwds)
+                .post(add_recent_cwd_handler)
+                .delete(delete_recent_cwd_handler),
+        )
         .route("/api/choose-folder", post(choose_folder))
+        .route(
+            "/api/prompts",
+            get(get_saved_prompts_handler).put(save_saved_prompts_handler),
+        )
         .route("/api/updater/status", get(get_updater_status))
         .route("/api/updater/check", post(check_updater))
         .route("/api/updater/install", post(install_updater))

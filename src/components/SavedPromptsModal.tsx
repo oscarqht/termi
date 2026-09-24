@@ -9,8 +9,10 @@ import {
 import {
   type SavedPrompt,
   loadSavedPrompts,
+  fetchSavedPrompts,
   saveSavedPrompts,
   resetSavedPrompts,
+  subscribeSavedPrompts,
 } from '../savedPrompts';
 
 interface SavedPromptsModalProps {
@@ -42,6 +44,7 @@ export const SavedPromptsModal: FC<SavedPromptsModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setPrompts(loadSavedPrompts());
+      fetchSavedPrompts().then(setPrompts);
       setActiveTab(initialManageMode || !onSelectPrompt ? 'manage' : 'choose');
       setSearch('');
       setEditingId(null);
@@ -55,7 +58,9 @@ export const SavedPromptsModal: FC<SavedPromptsModalProps> = ({
   }, [isOpen, initialManageMode, onSelectPrompt]);
 
   useEffect(() => {
+    const unsub = subscribeSavedPrompts(setPrompts);
     return () => {
+      unsub();
       if (copyTimeoutRef.current !== null) {
         window.clearTimeout(copyTimeoutRef.current);
       }
@@ -165,9 +170,9 @@ export const SavedPromptsModal: FC<SavedPromptsModalProps> = ({
     }
   };
 
-  const handleResetDefaults = () => {
+  const handleResetDefaults = async () => {
     if (window.confirm('Reset all saved prompts to default starter prompts? Any custom prompts will be replaced.')) {
-      const defaults = resetSavedPrompts();
+      const defaults = await resetSavedPrompts();
       setPrompts(defaults);
       setEditingId(null);
     }

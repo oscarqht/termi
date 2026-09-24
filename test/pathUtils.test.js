@@ -62,3 +62,40 @@ test('isSameCwd accurately matches equivalent working directories', () => {
   assert.ok(!isSameCwd('/Users/tangqh/projects/termi', '/Users/tangqh/projects/other', defaultDir));
   assert.ok(!isSameCwd('/Users/tangqh/projects/termi', '', defaultDir));
 });
+
+function formatPathDisplay(fullPath, homeDir = '') {
+  if (!fullPath) return { name: '', displayPath: '' };
+  let displayPath = fullPath.replace(/\\/g, '/');
+  if (homeDir) {
+    const normHome = homeDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (displayPath === normHome) {
+      displayPath = '~';
+    } else if (displayPath.startsWith(normHome + '/')) {
+      displayPath = '~' + displayPath.slice(normHome.length);
+    }
+  }
+  const parts = displayPath.split('/').filter(Boolean);
+  const name = displayPath === '~' ? '~' : parts[parts.length - 1] || '/';
+  return { name, displayPath };
+}
+
+function abbreviatePath(p, homeDir = '') {
+  const { displayPath } = formatPathDisplay(p, homeDir);
+  const parts = displayPath.split('/');
+  if (parts.length > 3) {
+    return `${parts[0]}/…/${parts.slice(-2).join('/')}`;
+  }
+  return displayPath;
+}
+
+test('formatPathDisplay and abbreviatePath produce compact labels', () => {
+  const home = '/Users/tangqh';
+  const { name, displayPath } = formatPathDisplay('/Users/tangqh/Downloads/projects/termi', home);
+  assert.equal(name, 'termi');
+  assert.equal(displayPath, '~/Downloads/projects/termi');
+
+  assert.equal(abbreviatePath('/Users/tangqh/Downloads/projects/termi', home), '~/…/projects/termi');
+  assert.equal(abbreviatePath('/Users/tangqh/Downloads', home), '~/Downloads');
+  assert.equal(abbreviatePath('/Users/tangqh', home), '~');
+});
+

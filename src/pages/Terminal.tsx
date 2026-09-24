@@ -10,6 +10,7 @@ import type { SessionInfo } from './Home';
 import { isSameCwd } from '../pathUtils';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
 import { CopyableCode, copyTextToClipboard } from '../components/CopyableCode';
+import { setupTerminalTouchScroll } from '../terminalTouchScroll';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'exited' | 'error';
 
@@ -186,6 +187,7 @@ export default function Terminal() {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const touchScrollCleanupRef = useRef<(() => void) | null>(null);
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
@@ -585,6 +587,13 @@ export default function Terminal() {
       xtermRef.current = term;
       term.focus();
 
+      touchScrollCleanupRef.current?.();
+      touchScrollCleanupRef.current = setupTerminalTouchScroll({
+        container,
+        term,
+        onSendInput: sendInput,
+      });
+
       const resizeObserver = new ResizeObserver(() => {
         fit.fit();
         const ws = wsRef.current;
@@ -654,6 +663,8 @@ export default function Terminal() {
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       fitAddonRef.current = null;
+      touchScrollCleanupRef.current?.();
+      touchScrollCleanupRef.current = null;
       xtermRef.current?.dispose();
       xtermRef.current = null;
       if (toastTimeoutRef.current) {

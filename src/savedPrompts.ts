@@ -4,8 +4,6 @@ export interface SavedPrompt {
   content: string;
 }
 
-export const SAVED_PROMPTS_KEY = 'termi:savedPrompts';
-
 export const DEFAULT_SAVED_PROMPTS: SavedPrompt[] = [
   {
     id: 'prompt-code-review',
@@ -33,34 +31,94 @@ export const DEFAULT_SAVED_PROMPTS: SavedPrompt[] = [
   },
 ];
 
-export function loadSavedPrompts(): SavedPrompt[] {
+let cachedPrompts: SavedPrompt[] | null = null;
+type Listener = (prompts: SavedPrompt[]) => void;
+const listeners = new Set<Listener>();
+
+export function subscribeSavedPrompts(fn: Listener): () => void {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function notifyListeners(prompts: SavedPrompt[]): void {
+  for (const fn of listeners) {
+    try {
+      fn(prompts);
+    } catch {
+      // Ignore listener error
+    }
+  }
+}
+
+export function parseSavedPrompts(raw: unknown): SavedPrompt[] {
+  if (raw === null || raw === undefined || raw === '') return DEFAULT_SAVED_PROMPTS;
   try {
-    const raw = localStorage.getItem(SAVED_PROMPTS_KEY);
-    if (!raw) return DEFAULT_SAVED_PROMPTS;
-    const parsed = JSON.parse(raw);
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!Array.isArray(parsed)) return DEFAULT_SAVED_PROMPTS;
-    const valid = parsed
+    return parsed
       .map((item, idx) => ({
-        id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `prompt-${idx}`,
-        title: typeof item.title === 'string' ? item.title.trim() : '',
-        content: typeof item.content === 'string' ? item.content : '',
+        id: typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : `prompt-${idx}`,
+        title: typeof item?.title === 'string' ? item.title.trim() : '',
+        content: typeof item?.content === 'string' ? item.content : '',
       }))
       .filter((p) => p.title.length > 0 || p.content.trim().length > 0);
-    return valid.length > 0 ? valid : DEFAULT_SAVED_PROMPTS;
   } catch {
     return DEFAULT_SAVED_PROMPTS;
   }
 }
 
-export function saveSavedPrompts(prompts: SavedPrompt[]): void {
+export function loadSavedPrompts(): SavedPrompt[] {
+  return cachedPrompts !== null ? cachedPrompts : DEFAULT_SAVED_PROMPTS;
+}
+
+export async function fetchSavedPrompts(): Promise<SavedPrompt[]> {
   try {
-    localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(prompts));
-  } catch {
-    // Ignore storage quota or disabled localStorage errors
+    const res = await fetch('/api/prompts');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const parsed = parseSavedPrompts(data);
+    cachedPrompts = parsed;
+    notifyListeners(parsed);
+    return parsed;
+  } catch (err) {
+    console.warn('[termi] Failed to fetch prompts from server:', err);
+    return cachedPrompts !== null ? cachedPrompts : DEFAULT_SAVED_PROMPTS;
   }
 }
 
-export function resetSavedPrompts(): SavedPrompt[] {
-  saveSavedPrompts(DEFAULT_SAVED_PROMPTS);
-  return DEFAULT_SAVED_PROMPTS;
+export async function saveSavedPrompts(prompts: SavedPrompt[]): Promise<SavedPrompt[]> {
+  const sanitized = (Array.isArray(prompts) ? prompts : [])
+    .map((item, idx) => ({
+      id: typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : `prompt-${Date.now()}-${idx}`,
+      title: typeof item?.title === 'string' ? item.title.trim() : '',
+      content: typeof item?.content === 'string' ? item.content : '',
+    }))
+    .filter((p) => p.title.length > 0 || p.content.trim().length > 0);
+
+  // Optimistically update cache and notify
+  cachedPrompts = sanitized;
+  notifyListeners(sanitized);
+
+  try {
+    const res = await fetch('/api/prompts', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sanitized),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const parsed = parseSavedPrompts(data);
+    cachedPrompts = parsed;
+    notifyListeners(parsed);
+    return parsed;
+  } catch (err) {
+    console.warn('[termi] Failed to persist prompts to server:', err);
+    return sanitized;
+  }
+}
+
+export async function resetSavedPrompts(): Promise<SavedPrompt[]> {
+  return await saveSavedPrompts(DEFAULT_SAVED_PROMPTS);
 }

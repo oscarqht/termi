@@ -1,7 +1,10 @@
+pub mod prompts;
+pub mod recent_cwds;
 pub mod server;
 pub mod session;
 pub mod tray;
 pub mod updater;
+
 
 use std::sync::Arc;
 use session::SessionManager;
