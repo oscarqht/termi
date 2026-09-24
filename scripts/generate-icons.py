@@ -79,6 +79,9 @@ if os.path.exists('dist'):
     app_icon_256.save('dist/app-icon.png')
 
 app_icon.save('assets/icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+app_icon.save('public/favicon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+if os.path.exists('dist'):
+    app_icon.save('dist/favicon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
 
 print("Running tauri icon generator for bundle assets...")
 subprocess.run(['npx', 'tauri', 'icon', 'assets/icon.png', '-o', 'src-tauri/icons'], check=True)
