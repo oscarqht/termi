@@ -964,6 +964,177 @@ button.danger:hover {
   flex-wrap: wrap;
 }
 
+/* Slash Command Menu inside Text Editor */
+.text-editor-slash-menu {
+  position: absolute;
+  z-index: 50;
+  width: 420px;
+  max-width: calc(100% - 24px);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-surface-active);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slashMenuFadeIn 0.12s ease-out;
+}
+
+@keyframes slashMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.text-editor-slash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.75rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.text-editor-slash-header-query {
+  color: var(--btn-primary-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 500;
+  text-transform: none;
+}
+
+.text-editor-slash-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 0.35rem 0;
+}
+
+.text-editor-slash-item {
+  padding: 0.45rem 0.75rem;
+  margin: 0.1rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.1s, border-color 0.1s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  user-select: none;
+}
+
+.text-editor-slash-item:hover,
+.text-editor-slash-item.active {
+  background: var(--bg-surface-active);
+}
+
+.text-editor-slash-item.active {
+  border-left: 3px solid var(--btn-primary-bg);
+  padding-left: calc(0.75rem - 3px);
+}
+
+.text-editor-slash-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.text-editor-slash-item-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--btn-primary-bg);
+  background: rgba(79, 140, 255, 0.15);
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.text-editor-slash-item-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-editor-slash-item-preview {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 1.45rem;
+}
+
+.text-editor-slash-empty {
+  padding: 1rem 0.75rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.text-editor-slash-empty-text {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.text-editor-slash-open-prompts {
+  font-size: 0.78rem;
+}
+
+.text-editor-slash-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  gap: 0.75rem;
+  white-space: nowrap;
+}
+
+.text-editor-slash-hint {
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.text-editor-slash-manage-link {
+  font-size: 0.72rem;
+  padding: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@media (prefers-color-scheme: light) {
+  .text-editor-slash-menu {
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+    border-color: var(--border-subtle);
+  }
+
+  .text-editor-slash-item-badge {
+    background: rgba(9, 105, 218, 0.12);
+  }
+}
+
+
 .common-cmds-section {
   border-top: 1px solid var(--border-subtle);
   margin-top: 0.5rem;

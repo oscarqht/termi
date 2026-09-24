@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FC,
@@ -10,6 +11,9 @@ import {
 } from 'react';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
 import { SavedPromptsModal } from './SavedPromptsModal';
+import { loadSavedPrompts, type SavedPrompt } from '../savedPrompts';
+import { getCaretCoordinates } from '../caretPosition';
+import { getActiveSlashQuery, applySlashPrompt } from '../slashCommandUtils';
 
 interface TextEditorModalProps {
   isOpen: boolean;
@@ -33,10 +37,20 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
+  const [promptsManageMode, setPromptsManageMode] = useState(false);
+
+  const [slashActive, setSlashActive] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [slashCoords, setSlashCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const errorTimeoutRef = useRef<number | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const slashListRef = useRef<HTMLDivElement>(null);
+  const dismissedSlashIndexRef = useRef<number | null>(null);
 
   const draftKey = getDraftKey(sessionId);
 
@@ -56,6 +70,8 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
     } else {
       setDragActive(false);
       setUploadError(null);
+      setSlashActive(false);
+      dismissedSlashIndexRef.current = null;
     }
   }, [isOpen, draftKey]);
 
@@ -78,11 +94,122 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
     }, 4000);
   };
 
+  const filteredPrompts = useMemo(() => {
+    if (!slashActive) return [];
+    const all = loadSavedPrompts();
+    if (!slashQuery.trim()) return all;
+    const q = slashQuery.toLowerCase();
+    return all.filter(
+      (p) => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)
+    );
+  }, [slashActive, slashQuery]);
+
+  useEffect(() => {
+    setSlashSelectedIndex(0);
+  }, [slashQuery]);
+
+  useEffect(() => {
+    if (slashActive && slashListRef.current) {
+      const activeEl = slashListRef.current.querySelector<HTMLElement>(
+        '.text-editor-slash-item.active'
+      );
+      activeEl?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [slashSelectedIndex, slashActive]);
+
+  const updateSlashPosition = (idx: number) => {
+    const textarea = textareaRef.current;
+    const bodyEl = bodyRef.current;
+    if (!textarea || !bodyEl) return;
+
+    const coords = getCaretCoordinates(textarea, idx);
+    const textareaTop = textarea.offsetTop;
+    const textareaLeft = textarea.offsetLeft;
+
+    let top = textareaTop + coords.top - textarea.scrollTop + coords.lineHeight + 6;
+    let left = textareaLeft + coords.left - textarea.scrollLeft;
+
+    const bodyWidth = bodyEl.clientWidth;
+    const bodyHeight = bodyEl.clientHeight;
+    const menuWidth = Math.min(420, bodyWidth - 24);
+    const menuHeight = 240;
+
+    // If it would overflow the bottom of the editor body, show above caret
+    if (top + menuHeight > bodyHeight && textareaTop + coords.top - textarea.scrollTop - menuHeight - 6 > 0) {
+      top = textareaTop + coords.top - textarea.scrollTop - menuHeight - 6;
+    }
+
+    left = Math.max(12, Math.min(left, bodyWidth - menuWidth - 12));
+    setSlashCoords({ top, left });
+  };
+
+  const checkSlashCommand = (currentText?: string, cursorOverride?: number) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const val = currentText ?? textarea.value;
+    const cursor = cursorOverride ?? textarea.selectionStart;
+
+    if (textarea.selectionStart !== textarea.selectionEnd) {
+      setSlashActive(false);
+      return;
+    }
+
+    const match = getActiveSlashQuery(val, cursor);
+    if (!match) {
+      setSlashActive(false);
+      dismissedSlashIndexRef.current = null;
+      return;
+    }
+
+    if (dismissedSlashIndexRef.current === match.slashIndex) {
+      setSlashActive(false);
+      return;
+    }
+
+    setSlashIndex(match.slashIndex);
+    setSlashQuery(match.query);
+    updateSlashPosition(match.slashIndex);
+    setSlashActive(true);
+  };
+
+  const handleApplyPrompt = (prompt: SavedPrompt) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const currentVal = textarea.value;
+    const cursor = textarea.selectionStart;
+
+    const { newText, newCursorPos } = applySlashPrompt(
+      currentVal,
+      slashIndex,
+      cursor,
+      prompt.content
+    );
+
+    setText(newText);
+    try {
+      window.localStorage.setItem(draftKey, newText);
+    } catch {}
+
+    setSlashActive(false);
+    dismissedSlashIndexRef.current = null;
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.selectionStart = newCursorPos;
+      textarea.selectionEnd = newCursorPos;
+    });
+  };
+
   const handleTextChange = (val: string) => {
     setText(val);
     try {
       window.localStorage.setItem(draftKey, val);
     } catch {}
+    requestAnimationFrame(() => {
+      checkSlashCommand(val);
+    });
   };
 
   const insertTextAtCursor = (insertedText: string) => {
@@ -107,6 +234,9 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
 
     const updated = before + toInsert + after;
     handleTextChange(updated);
+
+    setSlashActive(false);
+    dismissedSlashIndexRef.current = null;
 
     requestAnimationFrame(() => {
       textarea.focus();
@@ -140,6 +270,8 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
     try {
       window.localStorage.removeItem(draftKey);
     } catch {}
+    setSlashActive(false);
+    dismissedSlashIndexRef.current = null;
     textareaRef.current?.focus();
   };
 
@@ -151,10 +283,50 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
       window.localStorage.removeItem(draftKey);
     } catch {}
     setText('');
+    setSlashActive(false);
+    dismissedSlashIndexRef.current = null;
     onClose();
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashActive) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (filteredPrompts.length > 0) {
+          setSlashSelectedIndex((prev) => (prev + 1) % filteredPrompts.length);
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (filteredPrompts.length > 0) {
+          setSlashSelectedIndex((prev) => (prev - 1 + filteredPrompts.length) % filteredPrompts.length);
+        }
+        return;
+      }
+
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        if (!e.metaKey && !e.ctrlKey && filteredPrompts.length > 0) {
+          e.preventDefault();
+          handleApplyPrompt(filteredPrompts[slashSelectedIndex]);
+          return;
+        }
+        if (e.key === 'Tab' && filteredPrompts.length === 0) {
+          e.preventDefault();
+          return;
+        }
+      }
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        dismissedSlashIndexRef.current = slashIndex;
+        setSlashActive(false);
+        return;
+      }
+    }
+
     // Cmd+Enter (Mac) or Ctrl+Enter: Send & Execute
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
@@ -330,6 +502,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
         </div>
 
         <div
+          ref={bodyRef}
           className={`modal-body text-editor-body${dragActive ? ' drag-active' : ''}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -341,8 +514,15 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
             value={text}
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onKeyUp={() => checkSlashCommand()}
+            onClick={() => checkSlashCommand()}
+            onScroll={() => {
+              if (slashActive) {
+                updateSlashPosition(slashIndex);
+              }
+            }}
             onPaste={handlePaste}
-            placeholder="Type or paste long text, scripts, or commands here..."
+            placeholder="Type or paste long text, scripts, or commands here... (Type / for saved prompts)"
             spellCheck={false}
           />
           {dragActive && (
@@ -357,6 +537,78 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
                 />
               </svg>
               <span>Drop files here to attach</span>
+            </div>
+          )}
+
+          {slashActive && (
+            <div
+              className="text-editor-slash-menu"
+              style={{ top: `${slashCoords.top}px`, left: `${slashCoords.left}px` }}
+              role="listbox"
+              aria-label="Saved Prompts"
+            >
+              <div className="text-editor-slash-header">
+                <span className="text-editor-slash-header-title">Saved Prompts</span>
+                {slashQuery ? (
+                  <span className="text-editor-slash-header-query">/{slashQuery}</span>
+                ) : null}
+              </div>
+
+              {filteredPrompts.length === 0 ? (
+                <div className="text-editor-slash-empty">
+                  <p className="text-editor-slash-empty-text">No matching prompts</p>
+                  <button
+                    type="button"
+                    className="link-button small text-editor-slash-open-prompts"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSlashActive(false);
+                      setPromptsManageMode(true);
+                      setPromptsOpen(true);
+                    }}
+                  >
+                    Manage saved prompts
+                  </button>
+                </div>
+              ) : (
+                <div className="text-editor-slash-list" ref={slashListRef}>
+                  {filteredPrompts.map((p, idx) => (
+                    <div
+                      key={p.id}
+                      role="option"
+                      aria-selected={idx === slashSelectedIndex}
+                      className={`text-editor-slash-item${idx === slashSelectedIndex ? ' active' : ''}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleApplyPrompt(p);
+                      }}
+                      onMouseEnter={() => setSlashSelectedIndex(idx)}
+                    >
+                      <div className="text-editor-slash-item-header">
+                        <span className="text-editor-slash-item-badge">/</span>
+                        <span className="text-editor-slash-item-title">{p.title}</span>
+                      </div>
+                      <div className="text-editor-slash-item-preview">{p.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="text-editor-slash-footer">
+                <span className="text-editor-slash-hint">↑↓ navigate · Enter insert · Esc dismiss</span>
+                <button
+                  type="button"
+                  className="link-button text-editor-slash-manage-link"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setSlashActive(false);
+                    setPromptsManageMode(true);
+                    setPromptsOpen(true);
+                  }}
+                >
+                  Manage prompts
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -408,7 +660,10 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
             <button
               type="button"
               className="secondary text-editor-prompts-btn"
-              onClick={() => setPromptsOpen(true)}
+              onClick={() => {
+                setPromptsManageMode(false);
+                setPromptsOpen(true);
+              }}
               title={`Saved Prompts (${navigator.platform.toUpperCase().includes('MAC') ? '⌘⇧P' : 'Ctrl+Shift+P'})`}
               aria-label="Saved Prompts"
             >
@@ -459,8 +714,12 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
       </div>
       <SavedPromptsModal
         isOpen={promptsOpen}
-        onClose={() => setPromptsOpen(false)}
+        onClose={() => {
+          setPromptsOpen(false);
+          setPromptsManageMode(false);
+        }}
         onSelectPrompt={(content) => insertTextAtCursor(content)}
+        initialManageMode={promptsManageMode}
       />
     </div>
   );
