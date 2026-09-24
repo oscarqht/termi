@@ -15,7 +15,8 @@
     "app:build:mac": "npm run build && tauri build --target aarch64-apple-darwin",
     "app:setup-permissions": "bash scripts/setup-macos-permissions.sh",
     "app:sign:local": "bash scripts/sign-local.sh",
-    "app:export-cert": "bash scripts/export-apple-cert.sh"
+    "app:export-cert": "bash scripts/export-apple-cert.sh",
+    "changelog": "node scripts/generate-changelog.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
