@@ -20,3 +20,29 @@ export function isSameCwd(a: string, b: string, defaultDir = ''): boolean {
   if (normA === normB) return true;
   return normA.toLowerCase() === normB.toLowerCase();
 }
+
+export function formatPathDisplay(fullPath: string, homeDir = ''): { name: string; displayPath: string } {
+  if (!fullPath) return { name: '', displayPath: '' };
+  let displayPath = fullPath.replace(/\\/g, '/');
+  if (homeDir) {
+    const normHome = homeDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (displayPath === normHome) {
+      displayPath = '~';
+    } else if (displayPath.startsWith(normHome + '/')) {
+      displayPath = '~' + displayPath.slice(normHome.length);
+    }
+  }
+  const parts = displayPath.split('/').filter(Boolean);
+  const name = displayPath === '~' ? '~' : parts[parts.length - 1] || '/';
+  return { name, displayPath };
+}
+
+export function abbreviatePath(p: string, homeDir = ''): string {
+  const { displayPath } = formatPathDisplay(p, homeDir);
+  const parts = displayPath.split('/');
+  if (parts.length > 3) {
+    return `${parts[0]}/…/${parts.slice(-2).join('/')}`;
+  }
+  return displayPath;
+}
+

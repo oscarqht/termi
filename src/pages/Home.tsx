@@ -9,10 +9,13 @@ import { CopyableCode } from '../components/CopyableCode';
 import {
   type SavedPrompt,
   loadSavedPrompts,
+  fetchSavedPrompts,
   saveSavedPrompts,
+  subscribeSavedPrompts,
 } from '../savedPrompts';
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
 import HeaderUpdater from '../components/HeaderUpdater';
+import { abbreviatePath, formatPathDisplay, isSameCwd } from '../pathUtils';
 
 export type SessionInfo = {
   id: string;
@@ -23,7 +26,6 @@ export type SessionInfo = {
   connected: boolean;
 };
 
-const RECENT_CWDS_KEY = 'termi:recentCwds';
 const RECENT_CMDS_KEY = 'termi:recentCmds';
 const MAX_RECENT = 10;
 
@@ -52,6 +54,7 @@ function rememberRecent(key: string, value: string, current: string[]): string[]
 
 export default function Home() {
   const [cwd, setCwd] = useState('');
+  const [defaultCwd, setDefaultCwd] = useState('');
   const [cmds, setCmds] = useState(['']);
   const [commonCmds, setCommonCmds] = useState<CommonCmd[]>(() => loadCommonCmds());
   const [newCmd, setNewCmd] = useState('');
@@ -115,8 +118,36 @@ export default function Home() {
 
   useEffect(() => {
     document.title = 'termi';
-    setRecentCwds(loadRecent(RECENT_CWDS_KEY));
     setRecentCmds(loadRecent(RECENT_CMDS_KEY));
+
+    fetch('/api/recent-cwds')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.defaultCwd) setDefaultCwd(data.defaultCwd);
+        if (Array.isArray(data?.cwds) && data.cwds.length > 0) {
+          setRecentCwds(data.cwds);
+          setCwd(data.cwds[0]);
+        } else if (data?.defaultCwd) {
+          setCwd(data.defaultCwd);
+        }
+      })
+      .catch(() => {
+        fetch('/api/default-cwd')
+          .then((r) => r.json())
+          .then((d) => {
+            if (d?.cwd) {
+              setDefaultCwd(d.cwd);
+              setCwd(d.cwd);
+            }
+          })
+          .catch(() => {});
+      });
+
+    fetchSavedPrompts().then(setSavedPrompts);
+    const unsubPrompts = subscribeSavedPrompts(setSavedPrompts);
+    return () => {
+      unsubPrompts();
+    };
   }, []);
 
   function updateCmd(index: number, value: string) {
@@ -130,13 +161,6 @@ export default function Home() {
   function removeCmd(index: number) {
     setCmds((prev) => prev.filter((_, i) => i !== index));
   }
-
-  useEffect(() => {
-    fetch('/api/default-cwd')
-      .then((r) => r.json())
-      .then((d) => setCwd(d.cwd))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     const refresh = () => {
@@ -222,7 +246,20 @@ export default function Home() {
   }
 
   function rememberCurrentValues() {
-    setRecentCwds((prev) => rememberRecent(RECENT_CWDS_KEY, cwd, prev));
+    const trimmedCwd = cwd.trim();
+    if (trimmedCwd) {
+      fetch('/api/recent-cwds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd: trimmedCwd }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data?.cwds)) setRecentCwds(data.cwds);
+        })
+        .catch(() => {});
+      setRecentCwds((prev) => [trimmedCwd, ...prev.filter((p) => p !== trimmedCwd)]);
+    }
     setRecentCmds((prev) => {
       let next = prev;
       for (const cmd of cmds) {
@@ -230,6 +267,25 @@ export default function Home() {
       }
       return next;
     });
+  }
+
+  async function removeRecentCwdEntry(targetPath: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    try {
+      const res = await fetch('/api/recent-cwds', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd: targetPath }),
+      });
+      const data = await res.json();
+      if (Array.isArray(data?.cwds)) {
+        setRecentCwds(data.cwds);
+      } else {
+        setRecentCwds((prev) => prev.filter((p) => p !== targetPath));
+      }
+    } catch {
+      setRecentCwds((prev) => prev.filter((p) => p !== targetPath));
+    }
   }
 
   function openTerminal(e: React.FormEvent) {
@@ -242,8 +298,10 @@ export default function Home() {
     try {
       const res = await fetch('/api/choose-folder', { method: 'POST' });
       const data = await res.json();
-      if (data.cwd) setCwd(data.cwd);
-      else if (data.error) alert(data.error);
+      if (data.cwd) {
+        setCwd(data.cwd);
+        setRecentCwds((prev) => [data.cwd, ...prev.filter((p) => p !== data.cwd)]);
+      } else if (data.error) alert(data.error);
     } catch {
       alert('Failed to open folder picker');
     }
@@ -311,6 +369,45 @@ export default function Home() {
             </button>
           </div>
         </label>
+        {recentCwds.length > 0 && (
+          <div className="recent-cwds-container">
+            <span className="recent-cwds-label">Recently used</span>
+            <div className="recent-cwds-chips">
+              {recentCwds.map((pathItem) => {
+                const { name } = formatPathDisplay(pathItem, defaultCwd);
+                const abbr = abbreviatePath(pathItem, defaultCwd);
+                const isSelected = isSameCwd(cwd, pathItem, defaultCwd);
+                return (
+                  <button
+                    key={pathItem}
+                    type="button"
+                    className={`recent-cwd-chip ${isSelected ? 'active' : ''}`}
+                    onClick={() => setCwd(pathItem)}
+                    title={pathItem}
+                  >
+                    <span className="recent-cwd-chip-name">{name}</span>
+                    <span className="recent-cwd-chip-abbr">({abbr})</span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="recent-cwd-chip-remove"
+                      onClick={(e) => removeRecentCwdEntry(pathItem, e)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          removeRecentCwdEntry(pathItem, e as unknown as React.MouseEvent);
+                        }
+                      }}
+                      title={`Remove ${pathItem} from history`}
+                      aria-label={`Remove ${pathItem}`}
+                    >
+                      ×
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <datalist id="recent-cwds">
           {recentCwds.map((c) => (
             <option value={c} key={c} />
@@ -576,7 +673,7 @@ export default function Home() {
         isOpen={savedPromptsModalOpen}
         onClose={() => {
           setSavedPromptsModalOpen(false);
-          setSavedPrompts(loadSavedPrompts());
+          fetchSavedPrompts().then(setSavedPrompts);
         }}
         initialManageMode={true}
       />

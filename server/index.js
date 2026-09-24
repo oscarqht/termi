@@ -23,6 +23,16 @@ import {
   ensureUploadDir,
   updateSessionTitle,
 } from './sessionManager.js';
+import {
+  loadRecentCwds,
+  addRecentCwd,
+  removeRecentCwd,
+} from './recentCwds.js';
+import {
+  loadSavedPrompts,
+  saveSavedPrompts,
+} from './promptsManager.js';
+
 
 // Cap a single uploaded file at 100MB.
 const UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
@@ -178,11 +188,75 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/recent-cwds') {
+    const cwds = await loadRecentCwds();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ cwds, defaultCwd: defaultCwd() }));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/recent-cwds') {
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      body = {};
+    }
+    const cwds = await addRecentCwd(body.cwd);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ cwds }));
+    return true;
+  }
+
+  if (req.method === 'DELETE' && url.pathname === '/api/recent-cwds') {
+    let target = url.searchParams.get('cwd');
+    if (!target) {
+      try {
+        const body = await readJsonBody(req);
+        target = body?.cwd;
+      } catch {}
+    }
+    const cwds = await removeRecentCwd(target);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ cwds }));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/prompts') {
+    const prompts = await loadSavedPrompts();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(prompts));
+    return true;
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/prompts') {
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return true;
+    }
+    if (!Array.isArray(body)) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Payload must be an array of prompts' }));
+      return true;
+    }
+    const saved = await saveSavedPrompts(body);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(saved));
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/choose-folder') {
     res.setHeader('Content-Type', 'application/json');
     if (customFolderPicker) {
       try {
         const cwd = await customFolderPicker();
+        if (cwd) await addRecentCwd(cwd);
         res.end(JSON.stringify({ cwd: cwd || null }));
       } catch (err) {
         res.end(JSON.stringify({ cwd: null, error: err.message }));
@@ -194,7 +268,9 @@ async function handleApi(req, res, url) {
         const { stdout } = await exec(
           `osascript -e 'POSIX path of (choose folder with prompt "Select working directory")'`,
         );
-        res.end(JSON.stringify({ cwd: stdout.trim().replace(/\/$/, '') }));
+        const folder = stdout.trim().replace(/\/$/, '');
+        if (folder) await addRecentCwd(folder);
+        res.end(JSON.stringify({ cwd: folder }));
       } catch {
         // User dismissed the dialog without choosing a folder.
         res.end(JSON.stringify({ cwd: null }));
@@ -205,6 +281,7 @@ async function handleApi(req, res, url) {
         const psCmd = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath }"`;
         const { stdout } = await exec(psCmd);
         const folder = stdout.trim();
+        if (folder) await addRecentCwd(folder);
         res.end(JSON.stringify({ cwd: folder || null }));
       } catch {
         res.end(JSON.stringify({ cwd: null }));
@@ -214,6 +291,7 @@ async function handleApi(req, res, url) {
       try {
         const { stdout } = await exec('zenity --file-selection --directory 2>/dev/null || kdialog --getexistingdirectory 2>/dev/null');
         const folder = stdout.trim();
+        if (folder) await addRecentCwd(folder);
         res.end(JSON.stringify({ cwd: folder || null }));
       } catch {
         res.statusCode = 501;
@@ -255,6 +333,7 @@ async function handleApi(req, res, url) {
     const cmd = typeof body.cmd === 'string' ? body.cmd : '';
     const title = typeof body.title === 'string' ? body.title : '';
     const session = createSession({ cwd: resolvedCwd, cmd, title });
+    await addRecentCwd(resolvedCwd);
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd, title: session.title || '' }));
     return true;

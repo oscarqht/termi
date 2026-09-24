@@ -11,7 +11,12 @@ import {
 } from 'react';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
 import { SavedPromptsModal } from './SavedPromptsModal';
-import { loadSavedPrompts, type SavedPrompt } from '../savedPrompts';
+import {
+  loadSavedPrompts,
+  fetchSavedPrompts,
+  subscribeSavedPrompts,
+  type SavedPrompt,
+} from '../savedPrompts';
 import { getCaretCoordinates } from '../caretPosition';
 import { getActiveSlashQuery, applySlashPrompt } from '../slashCommandUtils';
 
@@ -38,6 +43,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
   const [dragActive, setDragActive] = useState(false);
   const [promptsOpen, setPromptsOpen] = useState(false);
   const [promptsManageMode, setPromptsManageMode] = useState(false);
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>(() => loadSavedPrompts());
 
   const [slashActive, setSlashActive] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
@@ -57,6 +63,7 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
   // Load draft on open or sessionId change
   useEffect(() => {
     if (isOpen) {
+      fetchSavedPrompts().then(setSavedPrompts);
       try {
         const saved = window.localStorage.getItem(draftKey);
         if (saved !== null) {
@@ -74,6 +81,10 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
       dismissedSlashIndexRef.current = null;
     }
   }, [isOpen, draftKey]);
+
+  useEffect(() => {
+    return subscribeSavedPrompts(setSavedPrompts);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -96,13 +107,12 @@ export const TextEditorModal: FC<TextEditorModalProps> = ({
 
   const filteredPrompts = useMemo(() => {
     if (!slashActive) return [];
-    const all = loadSavedPrompts();
-    if (!slashQuery.trim()) return all;
+    if (!slashQuery.trim()) return savedPrompts;
     const q = slashQuery.toLowerCase();
-    return all.filter(
+    return savedPrompts.filter(
       (p) => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)
     );
-  }, [slashActive, slashQuery]);
+  }, [slashActive, slashQuery, savedPrompts]);
 
   useEffect(() => {
     setSlashSelectedIndex(0);

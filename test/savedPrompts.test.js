@@ -1,56 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-// Mirroring the storage and parsing logic for SavedPrompt
-const DEFAULT_SAVED_PROMPTS = [
-  {
-    id: 'prompt-code-review',
-    title: 'Code Review',
-    content:
-      'Review the recent git changes for potential bugs, security vulnerabilities, edge cases, and performance regressions. Provide prioritized, actionable feedback.',
-  },
-  {
-    id: 'prompt-explain-error',
-    title: 'Explain Error',
-    content:
-      'Analyze the error above in detail: explain why it occurred, identify the root cause, and provide the exact steps or code fix required to resolve it.',
-  },
-  {
-    id: 'prompt-git-summary',
-    title: 'Git Diff & Commit Message',
-    content:
-      'Inspect git status and staged diffs. Summarize the key changes made and propose a clean, conventional commit message with a short description.',
-  },
-  {
-    id: 'prompt-plan-next-steps',
-    title: 'Plan Next Steps',
-    content:
-      'Evaluate our current progress against requirements, list any remaining work or risks, and propose a concise step-by-step plan for what to tackle next.',
-  },
-];
-
-function parseSavedPrompts(raw) {
-  if (!raw) return DEFAULT_SAVED_PROMPTS;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return DEFAULT_SAVED_PROMPTS;
-    const valid = parsed
-      .map((item, idx) => ({
-        id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `prompt-${idx}`,
-        title: typeof item.title === 'string' ? item.title.trim() : '',
-        content: typeof item.content === 'string' ? item.content : '',
-      }))
-      .filter((p) => p.title.length > 0 || p.content.trim().length > 0);
-    return valid.length > 0 ? valid : DEFAULT_SAVED_PROMPTS;
-  } catch {
-    return DEFAULT_SAVED_PROMPTS;
-  }
-}
+import {
+  DEFAULT_SAVED_PROMPTS,
+  parseSavedPrompts,
+} from '../src/savedPrompts.ts';
+import {
+  DEFAULT_SAVED_PROMPTS as SERVER_DEFAULT_PROMPTS,
+  getPromptsFilePath,
+} from '../server/promptsManager.js';
 
 test('parseSavedPrompts returns defaults when raw is empty or null', () => {
   assert.equal(parseSavedPrompts(null).length, DEFAULT_SAVED_PROMPTS.length);
   assert.equal(parseSavedPrompts('').length, DEFAULT_SAVED_PROMPTS.length);
   assert.equal(parseSavedPrompts(undefined).length, DEFAULT_SAVED_PROMPTS.length);
+});
+
+test('parseSavedPrompts preserves empty array when user deletes all prompts', () => {
+  const resultFromString = parseSavedPrompts('[]');
+  assert.equal(resultFromString.length, 0);
+  assert.deepEqual(resultFromString, []);
+
+  const resultFromArray = parseSavedPrompts([]);
+  assert.equal(resultFromArray.length, 0);
+  assert.deepEqual(resultFromArray, []);
 });
 
 test('parseSavedPrompts handles invalid JSON gracefully', () => {
@@ -83,4 +55,11 @@ test('parseSavedPrompts filters out empty items and auto-assigns id if missing',
   assert.ok(parsed[0].id.startsWith('prompt-'));
   assert.equal(parsed[1].title, '');
   assert.equal(parsed[1].content, 'Content only without title');
+});
+
+test('server and client have consistent default prompts and standard path', () => {
+  assert.deepEqual(DEFAULT_SAVED_PROMPTS, SERVER_DEFAULT_PROMPTS);
+  const filePath = getPromptsFilePath();
+  assert.ok(filePath.includes('prompts.json'));
+  assert.ok(filePath.includes('termi'));
 });
