@@ -38,6 +38,18 @@ export function normalizeBranchName(raw: string): string {
   return str;
 }
 
+export function filterValidBranches(branches?: (string | null | undefined)[]): string[] {
+  return (branches || []).filter(
+    (b): b is string =>
+      typeof b === 'string' &&
+      b.trim() !== '' &&
+      b !== 'origin' &&
+      b !== 'HEAD' &&
+      !b.endsWith('/HEAD') &&
+      !b.includes('->')
+  );
+}
+
 export async function fetchGitInfo(cwd: string): Promise<GitInfo> {
   if (!cwd || !cwd.trim()) return { isRepo: false };
   try {
@@ -49,7 +61,11 @@ export async function fetchGitInfo(cwd: string): Promise<GitInfo> {
     if (!contentType.includes('application/json')) {
       return { isRepo: false };
     }
-    return await res.json();
+    const data: GitInfo = await res.json();
+    if (data && Array.isArray(data.branches)) {
+      data.branches = filterValidBranches(data.branches);
+    }
+    return data;
   } catch (err) {
     return { isRepo: false, error: (err as Error).message };
   }

@@ -204,33 +204,69 @@ pub async fn get_git_info(cwd: &str) -> GitInfo {
         },
     };
 
+    // List remotes so we can ignore remote names and strip remote prefixes
+    let remotes: Vec<String> = match run_git(&repo_root, &["remote"]).await {
+        Ok((true, stdout, _)) => stdout
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect(),
+        _ => vec!["origin".to_string()],
+    };
+
     // List all branches (local and remote)
     let mut raw_branches = Vec::new();
     if let Ok((true, stdout, _)) = run_git(
         &repo_root,
-        &["branch", "-a", "--format=%(refname:short)"],
+        &["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes"],
     )
     .await
     {
         for line in stdout.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.contains("->") || trimmed.contains("/HEAD") {
+            let refname = line.trim();
+            if refname.is_empty() || refname.ends_with("/HEAD") || refname.contains("->") {
                 continue;
             }
-            let clean = if let Some(stripped) = trimmed.strip_prefix("origin/") {
-                stripped.to_string()
+
+            let branch_name = if let Some(local) = refname.strip_prefix("refs/heads/") {
+                local.to_string()
+            } else if let Some(remote_ref) = refname.strip_prefix("refs/remotes/") {
+                if let Some((_remote_name, r_branch)) = remote_ref.split_once('/') {
+                    if r_branch == "HEAD" || r_branch.is_empty() {
+                        continue;
+                    }
+                    r_branch.to_string()
+                } else {
+                    continue;
+                }
             } else {
-                trimmed.to_string()
+                continue;
             };
-            if !raw_branches.contains(&clean) {
-                raw_branches.push(clean);
+
+            let clean = branch_name.trim();
+            if clean.is_empty()
+                || clean == "HEAD"
+                || clean == "origin"
+                || remotes.iter().any(|r| r == clean)
+            {
+                continue;
+            }
+
+            if !raw_branches.contains(&clean.to_string()) {
+                raw_branches.push(clean.to_string());
             }
         }
     }
 
     let mut branches = Vec::new();
     if let Some(ref cur) = current_branch {
-        branches.push(cur.clone());
+        if cur != "origin"
+            && cur != "HEAD"
+            && !remotes.iter().any(|r| r == cur)
+            && (raw_branches.contains(cur) || raw_branches.is_empty())
+        {
+            branches.push(cur.clone());
+        }
     }
     if !branches.contains(&"main".to_string()) && raw_branches.contains(&"main".to_string()) {
         branches.push("main".to_string());
@@ -478,5 +514,7 @@ mod tests {
         assert!(info.is_repo);
         assert!(info.repo_root.is_some());
         assert!(!info.branches.is_empty());
+        assert!(!info.branches.contains(&"origin".to_string()));
+        assert!(!info.branches.contains(&"HEAD".to_string()));
     }
 }

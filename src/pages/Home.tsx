@@ -31,6 +31,7 @@ import {
   fetchGitInfo,
   deleteWorktreeApi,
   normalizeBranchName,
+  filterValidBranches,
 } from '../gitUtils';
 import {
   type SessionInfo,
@@ -110,10 +111,11 @@ export default function Home() {
         setGitInfo(info);
         setGitLoading(false);
         if (info.isRepo) {
-          if (info.currentBranch) {
+          const validBranches = filterValidBranches(info.branches);
+          if (info.currentBranch && validBranches.includes(info.currentBranch)) {
             setBaseBranch(info.currentBranch);
-          } else if (info.branches && info.branches.length > 0) {
-            setBaseBranch(info.branches[0]);
+          } else if (validBranches.length > 0) {
+            setBaseBranch(validBranches[0]);
           }
           const secondary = (info.worktrees || []).filter((w) => !w.isMain);
           if (secondary.length > 0 && !selectedWorktreePath) {
@@ -708,7 +710,7 @@ export default function Home() {
                               onChange={(e) => setBaseBranch(e.target.value)}
                               className="git-select"
                             >
-                              {gitInfo.branches?.map((b) => (
+                              {filterValidBranches(gitInfo.branches).map((b) => (
                                 <option key={b} value={b}>
                                   {b} {b === gitInfo.currentBranch ? '(current)' : ''}
                                 </option>
