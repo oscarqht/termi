@@ -1,4 +1,5 @@
-import { useCustomScriptExecution, ScriptExecutionStatus } from '../contexts/CustomScriptExecutionContext';
+import React, { useEffect, useRef, useState } from 'react';
+import { useCustomScriptExecution } from '../contexts/CustomScriptExecutionContext';
 import { Button, Badge } from './ui';
 
 export const ScriptModal: React.FC = () => {
