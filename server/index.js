@@ -41,6 +41,13 @@ import {
   cancelExecution,
   dismissExecution,
 } from './customScriptsManager.js';
+import {
+  getGitInfo,
+  createWorktreeSession,
+  syncExistingWorktree,
+  deleteWorktree,
+  normalizeBranchName,
+} from './gitManager.js';
 
 
 // Cap a single uploaded file at 100MB.
@@ -424,6 +431,54 @@ async function handleApi(req, res, url) {
     }
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/git/info') {
+    const targetCwd = url.searchParams.get('cwd') || defaultCwd();
+    try {
+      const info = await getGitInfo(targetCwd);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(info));
+    } catch (err) {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: err.message || 'Failed to fetch git info' }));
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/git/normalize-branch') {
+    let body = {};
+    try {
+      body = await readJsonBody(req);
+    } catch {}
+    const normalized = normalizeBranchName(body.name || '');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ normalized }));
+    return true;
+  }
+
+  if (req.method === 'DELETE' && url.pathname === '/api/git/worktrees') {
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return true;
+    }
+    const { cwd, worktreePath, branch } = body || {};
+    try {
+      const result = await deleteWorktree({ repoRoot: cwd, worktreePath, branch });
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: err.message || 'Failed to delete worktree' }));
+    }
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/sessions') {
     let body;
     try {
@@ -435,7 +490,7 @@ async function handleApi(req, res, url) {
     }
 
     const requestedCwd = typeof body.cwd === 'string' && body.cwd.trim() ? body.cwd : defaultCwd();
-    const resolvedCwd = path.resolve(requestedCwd.replace(/^~/, process.env.HOME ?? ''));
+    let resolvedCwd = path.resolve(requestedCwd.replace(/^~/, process.env.HOME ?? ''));
 
     let stat;
     try {
@@ -454,11 +509,67 @@ async function handleApi(req, res, url) {
     }
 
     const cmd = typeof body.cmd === 'string' ? body.cmd : '';
-    const title = typeof body.title === 'string' ? body.title : '';
-    const session = createSession({ cwd: resolvedCwd, cmd, title });
+    let title = typeof body.title === 'string' ? body.title : '';
+    let banner = null;
+
+    // Handle branching into a new worktree
+    if (body.baseBranch && body.newBranch) {
+      try {
+        const wtResult = await createWorktreeSession({
+          repoRoot: resolvedCwd,
+          baseBranch: String(body.baseBranch).trim(),
+          newBranch: String(body.newBranch).trim(),
+        });
+        resolvedCwd = wtResult.worktreePath;
+        title = wtResult.branch;
+        banner =
+          `\r\n\x1b[38;2;14;165;233m[termi]\x1b[0m Worktree ready at \x1b[1m.worktrees/${wtResult.branch.replace(/\//g, '-')}\x1b[0m (branch: \x1b[36m${wtResult.branch}\x1b[0m, base: \x1b[35m${wtResult.baseBranch}\x1b[0m)\r\n` +
+          (wtResult.remoteSyncWarning ? `\x1b[33m[termi] Warning: ${wtResult.remoteSyncWarning}\x1b[0m\r\n` : '') +
+          `\r\n`;
+      } catch (err) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: err.message || 'Failed to create worktree' }));
+        return true;
+      }
+    } else if (body.existingWorktreePath) {
+      const resolvedWt = path.resolve(String(body.existingWorktreePath).replace(/^~/, process.env.HOME ?? ''));
+      try {
+        const wtStat = await fsp.stat(resolvedWt);
+        if (!wtStat.isDirectory()) throw new Error('Worktree path is not a directory');
+      } catch (e) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: `Existing worktree not found: ${resolvedWt}` }));
+        return true;
+      }
+
+      // Sync with pull --rebase --autostash
+      const syncRes = await syncExistingWorktree(resolvedWt);
+      resolvedCwd = resolvedWt;
+
+      // Detect branch name
+      const wtInfo = await getGitInfo(resolvedWt);
+      const branchName = wtInfo.currentBranch || path.basename(resolvedWt);
+      title = branchName;
+      banner =
+        `\r\n\x1b[38;2;14;165;233m[termi]\x1b[0m Resumed worktree \x1b[1m${path.basename(resolvedWt)}\x1b[0m (branch: \x1b[36m${branchName}\x1b[0m)\r\n` +
+        (syncRes.warning ? `\x1b[33m[termi] ${syncRes.warning}\x1b[0m\r\n` : `\x1b[32m[termi] Up to date with remote (rebase --autostash)\x1b[0m\r\n`) +
+        `\r\n`;
+    }
+
+    const session = createSession({ cwd: resolvedCwd, cmd, title, banner });
     await addRecentCwd(resolvedCwd);
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd, title: session.title || '' }));
+    res.end(
+      JSON.stringify({
+        id: session.id,
+        cwd: session.cwd,
+        cmd: session.cmd,
+        title: session.title || '',
+        banner,
+      })
+    );
     return true;
   }
 

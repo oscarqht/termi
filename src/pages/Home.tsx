@@ -25,6 +25,13 @@ import { useCustomScriptExecution } from '../contexts/CustomScriptExecutionConte
 import HeaderUpdater from '../components/HeaderUpdater';
 import { abbreviatePath, formatPathDisplay, isSameCwd } from '../pathUtils';
 import { Card, Button, Badge, Header } from '../components/ui';
+import {
+  type GitInfo,
+  type GitWorktree,
+  fetchGitInfo,
+  deleteWorktreeApi,
+  normalizeBranchName,
+} from '../gitUtils';
 
 export type SessionInfo = {
   id: string;
@@ -82,6 +89,51 @@ export default function Home() {
   const [newPromptTitle, setNewPromptTitle] = useState('');
   const [newPromptContent, setNewPromptContent] = useState('');
   const [activeTab, setActiveTab] = useState<'sessions' | 'prompts' | 'scripts'>('sessions');
+
+  const [gitInfo, setGitInfo] = useState<GitInfo | null>(null);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitMode, setGitMode] = useState<'none' | 'branch' | 'worktree'>('none');
+  const [baseBranch, setBaseBranch] = useState('');
+  const [newBranchInput, setNewBranchInput] = useState('');
+  const [selectedWorktreePath, setSelectedWorktreePath] = useState('');
+  const [deleteWorktreeTarget, setDeleteWorktreeTarget] = useState<GitWorktree | null>(null);
+  const [deletingWorktree, setDeletingWorktree] = useState(false);
+
+  useEffect(() => {
+    if (!cwd.trim()) {
+      setGitInfo(null);
+      return;
+    }
+    let active = true;
+    setGitLoading(true);
+    const timer = setTimeout(() => {
+      fetchGitInfo(cwd).then((info) => {
+        if (!active) return;
+        setGitInfo(info);
+        setGitLoading(false);
+        if (info.isRepo) {
+          if (info.currentBranch) {
+            setBaseBranch(info.currentBranch);
+          } else if (info.branches && info.branches.length > 0) {
+            setBaseBranch(info.branches[0]);
+          }
+          const secondary = (info.worktrees || []).filter((w) => !w.isMain);
+          if (secondary.length > 0 && !selectedWorktreePath) {
+            setSelectedWorktreePath(secondary[0].path);
+          }
+        } else {
+          setGitMode('none');
+        }
+      });
+    }, 250);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [cwd]);
+
+  const secondaryWorktrees = (gitInfo?.worktrees || []).filter((w) => !w.isMain);
+  const normalizedBranchPreview = normalizeBranchName(newBranchInput);
 
   function addSavedPromptFromHome() {
     const titleTrim = newPromptTitle.trim();
@@ -241,22 +293,51 @@ export default function Home() {
     saveCommonCmds(DEFAULT_COMMON_CMDS);
   }
 
-  function termUrl() {
+  function termUrl(opts?: {
+    overrideCwd?: string;
+    overrideCmd?: string;
+    baseBranch?: string;
+    newBranch?: string;
+    existingWorktree?: string;
+  }) {
     const params = new URLSearchParams();
-    if (cwd.trim()) params.set('cwd', cwd.trim());
-    const seen = new Set<string>();
-    for (const cmd of cmds) {
-      const trimmed = cmd.trim();
-      if (trimmed && !seen.has(trimmed)) {
-        seen.add(trimmed);
-        params.append('cmd', trimmed);
+    const effectiveCwd = opts?.overrideCwd !== undefined ? opts.overrideCwd : cwd;
+    if (effectiveCwd.trim()) params.set('cwd', effectiveCwd.trim());
+
+    if (opts?.existingWorktree) {
+      params.set('existingWorktree', opts.existingWorktree);
+    } else if (opts?.baseBranch && opts?.newBranch) {
+      params.set('baseBranch', opts.baseBranch);
+      params.set('newBranch', opts.newBranch);
+    } else if (gitMode === 'branch') {
+      const normalized = normalizeBranchName(newBranchInput);
+      if (baseBranch && normalized) {
+        params.set('baseBranch', baseBranch);
+        params.set('newBranch', normalized);
+      }
+    } else if (gitMode === 'worktree') {
+      if (selectedWorktreePath) {
+        params.set('existingWorktree', selectedWorktreePath);
       }
     }
-    for (const item of commonCmds) {
-      const trimmed = item.cmd.trim();
-      if (item.enabled && trimmed && !seen.has(trimmed)) {
-        seen.add(trimmed);
-        params.append('cmd', trimmed);
+
+    const seen = new Set<string>();
+    if (opts?.overrideCmd !== undefined) {
+      if (opts.overrideCmd.trim()) params.append('cmd', opts.overrideCmd.trim());
+    } else {
+      for (const cmd of cmds) {
+        const trimmed = cmd.trim();
+        if (trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          params.append('cmd', trimmed);
+        }
+      }
+      for (const item of commonCmds) {
+        const trimmed = item.cmd.trim();
+        if (item.enabled && trimmed && !seen.has(trimmed)) {
+          seen.add(trimmed);
+          params.append('cmd', trimmed);
+        }
       }
     }
     return `${window.location.origin}/term?${params.toString()}`;
@@ -305,13 +386,64 @@ export default function Home() {
     }
   }
 
+  function resumeWorktree(wt: GitWorktree, inNewTab = false) {
+    rememberCurrentValues();
+    const url = termUrl({
+      overrideCwd: wt.path,
+      existingWorktree: wt.path,
+    });
+    if (inNewTab) {
+      window.open(url, '_blank');
+    } else {
+      window.location.href = url;
+    }
+  }
+
+  async function confirmDeleteWorktree() {
+    if (!deleteWorktreeTarget || !gitInfo?.repoRoot) return;
+    setDeletingWorktree(true);
+    const res = await deleteWorktreeApi({
+      cwd: gitInfo.repoRoot,
+      worktreePath: deleteWorktreeTarget.path,
+      branch: deleteWorktreeTarget.branch,
+    });
+    setDeletingWorktree(false);
+    setDeleteWorktreeTarget(null);
+    if (res.ok && res.gitInfo) {
+      setGitInfo(res.gitInfo);
+      if (selectedWorktreePath === deleteWorktreeTarget.path) {
+        const remaining = (res.gitInfo.worktrees || []).filter((w) => !w.isMain);
+        setSelectedWorktreePath(remaining.length > 0 ? remaining[0].path : '');
+        if (remaining.length === 0 && gitMode === 'worktree') {
+          setGitMode('none');
+        }
+      }
+    } else if (res.error) {
+      alert(`Failed to delete worktree: ${res.error}`);
+    }
+  }
+
   function openTerminal(e?: React.FormEvent) {
     if (e) e.preventDefault();
+    if (gitMode === 'branch') {
+      const normalized = normalizeBranchName(newBranchInput);
+      if (!normalized) {
+        alert('Please enter a branch or task name.');
+        return;
+      }
+    }
     rememberCurrentValues();
     window.location.href = termUrl();
   }
 
   function openInNewTab() {
+    if (gitMode === 'branch') {
+      const normalized = normalizeBranchName(newBranchInput);
+      if (!normalized) {
+        alert('Please enter a branch or task name.');
+        return;
+      }
+    }
     rememberCurrentValues();
     window.open(termUrl(), '_blank');
   }
@@ -504,6 +636,120 @@ export default function Home() {
                     ))}
                   </datalist>
 
+                  {gitInfo?.isRepo && (
+                    <div className="git-session-section">
+                      <div className="git-session-header">
+                        <div className="git-session-title">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="6" y1="3" x2="6" y2="15" />
+                            <circle cx="18" cy="6" r="3" />
+                            <circle cx="6" cy="18" r="3" />
+                            <path d="M18 9a9 9 0 0 1-9 9" />
+                          </svg>
+                          <span>Git &amp; Worktree Isolation</span>
+                        </div>
+                        <div className="git-session-badge" title="Current repository branch">
+                          Current: <strong>{gitInfo.currentBranch || 'detached'}</strong>
+                        </div>
+                      </div>
+
+                      <div className="git-mode-selector">
+                        <label className={`git-mode-option ${gitMode === 'none' ? 'active' : ''}`}>
+                          <input
+                            type="radio"
+                            name="gitMode"
+                            checked={gitMode === 'none'}
+                            onChange={() => setGitMode('none')}
+                          />
+                          <span>Direct directory</span>
+                        </label>
+
+                        <label className={`git-mode-option ${gitMode === 'branch' ? 'active' : ''}`}>
+                          <input
+                            type="radio"
+                            name="gitMode"
+                            checked={gitMode === 'branch'}
+                            onChange={() => setGitMode('branch')}
+                          />
+                          <span>Branch from base branch</span>
+                        </label>
+
+                        {secondaryWorktrees.length > 0 && (
+                          <label className={`git-mode-option ${gitMode === 'worktree' ? 'active' : ''}`}>
+                            <input
+                              type="radio"
+                              name="gitMode"
+                              checked={gitMode === 'worktree'}
+                              onChange={() => setGitMode('worktree')}
+                            />
+                            <span>Reuse worktree ({secondaryWorktrees.length})</span>
+                          </label>
+                        )}
+                      </div>
+
+                      {gitMode === 'branch' && (
+                        <div className="git-branch-form">
+                          <div className="git-field-label">
+                            Base branch (pulls remote latest before branching)
+                            <select
+                              value={baseBranch}
+                              onChange={(e) => setBaseBranch(e.target.value)}
+                              className="git-select"
+                            >
+                              {gitInfo.branches?.map((b) => (
+                                <option key={b} value={b}>
+                                  {b} {b === gitInfo.currentBranch ? '(current)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="git-field-label">
+                            New branch / task name
+                            <input
+                              value={newBranchInput}
+                              onChange={(e) => setNewBranchInput(e.target.value)}
+                              placeholder="e.g. add-oauth-login or fix/session-leak"
+                              className="git-input"
+                            />
+                            {normalizedBranchPreview ? (
+                              <div className="git-normalized-preview">
+                                <span>Branch to create:</span>
+                                <code>{normalizedBranchPreview}</code>
+                                <span className="git-preview-path">
+                                  (.worktrees/{normalizedBranchPreview.replace(/\//g, '-')})
+                                </span>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                Enter a task or feature name. It will be normalized to a clean git branch and worktree.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {gitMode === 'worktree' && secondaryWorktrees.length > 0 && (
+                        <div className="git-worktree-form">
+                          <div className="git-field-label">
+                            Existing worktree to resume (auto-syncs with remote rebase)
+                            <select
+                              value={selectedWorktreePath}
+                              onChange={(e) => setSelectedWorktreePath(e.target.value)}
+                              className="git-select"
+                            >
+                              {secondaryWorktrees.map((wt) => (
+                                <option key={wt.path} value={wt.path}>
+                                  {wt.branch || wt.relative} — {wt.commitMsg ? `"${wt.commitMsg.slice(0, 40)}"` : wt.head}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="cmd-list">
                     <span className="cmd-list-label">Initial command (optional)</span>
                     {cmds.map((cmd, i) => (
@@ -648,6 +894,65 @@ export default function Home() {
                 </div>
               </Card>
             </form>
+
+            {gitInfo?.isRepo && secondaryWorktrees.length > 0 && (
+              <Card
+                title="Git Worktrees"
+                subtitle={`Isolated workspaces in ${gitInfo.repoRoot ? abbreviatePath(gitInfo.repoRoot, defaultCwd) : 'repository'}`}
+                badge={
+                  <Badge variant="info">
+                    {secondaryWorktrees.length} active
+                  </Badge>
+                }
+                icon={
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="6" y1="3" x2="6" y2="15" />
+                    <circle cx="18" cy="6" r="3" />
+                    <circle cx="6" cy="18" r="3" />
+                    <path d="M18 9a9 9 0 0 1-9 9" />
+                  </svg>
+                }
+              >
+                <ul className="worktree-list">
+                  {secondaryWorktrees.map((wt) => (
+                    <li key={wt.path} className="worktree-item">
+                      <div className="worktree-info">
+                        <div className="worktree-header">
+                          <Badge variant="success">{wt.branch || 'detached'}</Badge>
+                          <span className="worktree-relative-path">{wt.relative}</span>
+                        </div>
+                        {wt.commitMsg && (
+                          <div className="worktree-commit">
+                            <span className="commit-sha">{wt.head}</span>
+                            <span className="commit-msg">{wt.commitMsg}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="worktree-actions">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => resumeWorktree(wt, false)}
+                          title="Open terminal session in this worktree"
+                        >
+                          Open Terminal
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setDeleteWorktreeTarget(wt)}
+                          title="Delete worktree and its branch"
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
             <Card
               title="Active Sessions"
@@ -916,6 +1221,54 @@ export default function Home() {
         onClose={() => setCustomScriptsModalOpen(false)}
         currentCwd={cwd || defaultCwd}
       />
+
+      {deleteWorktreeTarget && (
+        <div className="modal-backdrop" onClick={() => !deletingWorktree && setDeleteWorktreeTarget(null)}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div className="modal-header">
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Delete Worktree &amp; Branch</h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => !deletingWorktree && setDeleteWorktreeTarget(null)}
+                disabled={deletingWorktree}
+              >
+                &times;
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: '1rem 0' }}>
+              <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                Are you sure you want to delete this worktree?
+              </p>
+              <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 6, fontSize: '0.85rem' }}>
+                <div><strong>Branch:</strong> <span style={{ color: '#38bdf8' }}>{deleteWorktreeTarget.branch || 'detached'}</span></div>
+                <div style={{ marginTop: 4 }}><strong>Path:</strong> <code>{deleteWorktreeTarget.relative}</code></div>
+              </div>
+              <p style={{ margin: '0.75rem 0 0', fontSize: '0.8rem', color: 'var(--error-color)' }}>
+                This will remove the worktree directory from disk and force-delete the git branch.
+              </p>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setDeleteWorktreeTarget(null)}
+                disabled={deletingWorktree}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={confirmDeleteWorktree}
+                disabled={deletingWorktree}
+              >
+                {deletingWorktree ? 'Deleting...' : 'Delete Worktree & Branch'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

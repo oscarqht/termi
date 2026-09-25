@@ -100,6 +100,9 @@ function paramsFromLocation() {
     cmds: url.searchParams.getAll('cmd').filter((c) => c.trim()),
     session: url.searchParams.get('session'),
     start: url.searchParams.get('start') === '1',
+    baseBranch: url.searchParams.get('baseBranch') || undefined,
+    newBranch: url.searchParams.get('newBranch') || undefined,
+    existingWorktree: url.searchParams.get('existingWorktree') || undefined,
   };
 }
 
@@ -108,6 +111,9 @@ function setSessionParam(id: string) {
   url.searchParams.set('session', id);
   url.searchParams.delete('start');
   url.searchParams.delete('cmd');
+  url.searchParams.delete('baseBranch');
+  url.searchParams.delete('newBranch');
+  url.searchParams.delete('existingWorktree');
   window.history.replaceState(null, '', url.toString());
 }
 
@@ -926,10 +932,17 @@ export default function Terminal() {
     retryCountRef.current = 0;
     clearReconnectTimer();
     try {
+      const payload: Record<string, any> = { cwd: effectiveCwd, cmd: effectiveCmd };
+      if (initial.baseBranch && initial.newBranch) {
+        payload.baseBranch = initial.baseBranch;
+        payload.newBranch = initial.newBranch;
+      } else if (initial.existingWorktree) {
+        payload.existingWorktreePath = initial.existingWorktree;
+      }
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwd: effectiveCwd, cmd: effectiveCmd }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {

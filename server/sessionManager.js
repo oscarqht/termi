@@ -64,7 +64,7 @@ export function listSessions() {
   }));
 }
 
-export function createSession({ cwd, cmd, title }) {
+export function createSession({ cwd, cmd, title, banner }) {
   const id = crypto.randomUUID();
   const isWin = process.platform === 'win32';
   const termEnv = {
@@ -97,6 +97,10 @@ export function createSession({ cwd, cmd, title }) {
     uploadDir: path.join(os.tmpdir(), 'termi-uploads', id),
     exited: false,
   };
+
+  if (banner && typeof banner === 'string') {
+    session.buffer.write(banner);
+  }
 
   term.on('error', (err) => {
     console.warn(`[termi] pty error on session ${id}:`, err);
