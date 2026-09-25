@@ -1068,6 +1068,7 @@ button.danger:hover {
   z-index: 85;
   width: 38px;
   height: 38px;
+  padding: 0;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1081,6 +1082,13 @@ button.danger:hover {
   cursor: pointer;
   transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.15s ease, color 0.15s ease, bottom 0.2s ease;
   animation: scrollBtnFadeIn 0.2s ease-out;
+}
+
+.terminal-scroll-to-bottom svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
 }
 
 @keyframes scrollBtnFadeIn {
