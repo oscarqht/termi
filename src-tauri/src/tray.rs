@@ -271,7 +271,7 @@ pub fn setup_tray(
                             use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
                             let session_plural = if active_sessions == 1 { "session" } else { "sessions" };
                             let prompt_text = format!(
-                                "You have {active_sessions} active terminal {session_plural} running in the background.\n\n\
+                                "You have {active_sessions} terminal {session_plural} currently managed by Termi.\n\n\
                                 Do you want to keep them running in the background, or stop all sessions and quit?"
                             );
 

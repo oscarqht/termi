@@ -48,18 +48,22 @@ export default function HeaderUpdater() {
     const isBusy = status.status === 'Checking' || status.status === 'Downloading';
     if (!isBusy && !isOpen && !isRestarting) return;
 
-    const intervalMs = isRestarting ? 1000 : isBusy ? 1000 : 3000;
+    let pollAttempts = 0;
+    const intervalMs = isRestarting ? 1500 : isBusy ? 1000 : 3000;
     const interval = setInterval(() => {
       if (isRestarting) {
-        // Poll for server coming back up
-        fetch('/api/default-cwd')
-          .then((r) => {
-            if (r.ok) {
-              clearInterval(interval);
-              window.location.reload();
-            }
-          })
-          .catch(() => {});
+        pollAttempts += 1;
+        // Wait at least 3 intervals (~4.5s) before polling so the relaunch sequence has begun
+        if (pollAttempts >= 3) {
+          fetch('/api/default-cwd')
+            .then((r) => {
+              if (r.ok) {
+                clearInterval(interval);
+                window.location.reload();
+              }
+            })
+            .catch(() => {});
+        }
       } else {
         fetchStatus();
       }

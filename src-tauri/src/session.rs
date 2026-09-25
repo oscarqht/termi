@@ -366,11 +366,12 @@ fn spawn_pty(
     // Background thread waiting for child process exit
     let session_for_exit = session.clone();
     let tx_for_exit = session.tx.clone();
-    let session_id = session.id.clone();
     let upload_dir = session.upload_dir.clone();
+    let _ = sm;
     std::thread::spawn(move || {
         let exit_status = child.wait();
         session_for_exit.exited.store(true, Ordering::Relaxed);
+        session_for_exit.dormant.store(true, Ordering::Relaxed);
         let code = match exit_status {
             Ok(status) => status.exit_code() as i32,
             Err(_) => 0,
@@ -382,10 +383,15 @@ fn spawn_pty(
         .to_string();
         let _ = tx_for_exit.send(msg);
 
+        // Reset master and writer_tx so stale file descriptors are closed
+        if let Ok(mut master_guard) = session_for_exit.master.lock() {
+            *master_guard = None;
+        }
+        if let Ok(mut writer_tx_guard) = session_for_exit.writer_tx.write() {
+            *writer_tx_guard = None;
+        }
+
         let _ = std::fs::remove_dir_all(&upload_dir);
-        tokio::spawn(async move {
-            sm.remove(&session_id).await;
-        });
     });
 
     // If an initial cmd was provided, send it
@@ -432,16 +438,14 @@ impl SessionManager {
         let map = self.sessions.read().await;
         let mut records = Vec::new();
         for s in map.values() {
-            if !s.exited.load(Ordering::Relaxed) {
-                let title = s.title.read().await.clone();
-                records.push(SessionRecord {
-                    id: s.id.clone(),
-                    cwd: s.cwd.clone(),
-                    cmd: s.cmd.clone(),
-                    title,
-                    created_at: s.created_at,
-                });
-            }
+            let title = s.title.read().await.clone();
+            records.push(SessionRecord {
+                id: s.id.clone(),
+                cwd: s.cwd.clone(),
+                cmd: s.cmd.clone(),
+                title,
+                created_at: s.created_at,
+            });
         }
         let _ = save_session_records(&records).await;
     }
@@ -463,15 +467,21 @@ impl SessionManager {
             .count()
     }
 
+    pub async fn total_count(&self) -> usize {
+        let map = self.sessions.read().await;
+        map.len()
+    }
+
     pub async fn activate(self: &Arc<Self>, id: &str) -> Result<Arc<Session>, String> {
         let session = {
             let map = self.sessions.read().await;
             map.get(id).cloned().ok_or_else(|| "Session not found".to_string())?
         };
 
-        if session.dormant.load(Ordering::Relaxed) {
+        if session.dormant.load(Ordering::Relaxed) || session.exited.load(Ordering::Relaxed) {
             spawn_pty(&session, self.clone())?;
             session.dormant.store(false, Ordering::Relaxed);
+            session.exited.store(false, Ordering::Relaxed);
         }
 
         Ok(session)
@@ -650,5 +660,39 @@ mod tests {
         sm.remove("dormant-1").await;
         assert_eq!(sm.active_count().await, 0);
         assert!(sm.get("dormant-1").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_session_persistence_when_exited() {
+        let sm = Arc::new(SessionManager::new());
+        let (tx, _rx) = broadcast::channel(512);
+        let session = Arc::new(Session {
+            id: "persist-1".to_string(),
+            cwd: default_cwd(),
+            cmd: "".to_string(),
+            title: RwLock::new("Persisted Shell".to_string()),
+            created_at: 1700000000,
+            buffer: RwLock::new(OutputBuffer::new(1000)),
+            client_count: AtomicUsize::new(0),
+            exited: AtomicBool::new(true),
+            dormant: AtomicBool::new(true),
+            master: std::sync::Mutex::new(None),
+            writer_tx: std::sync::RwLock::new(None),
+            tx,
+            upload_dir: std::env::temp_dir().join("termi-test-upload"),
+        });
+        sm.sessions.write().await.insert("persist-1".to_string(), session);
+
+        assert_eq!(sm.total_count().await, 1);
+        assert_eq!(sm.active_count().await, 0);
+
+        // Activating re-spawns PTY and resets exited/dormant
+        let activated = sm.activate("persist-1").await.expect("Failed to activate");
+        assert!(!activated.dormant.load(Ordering::Relaxed));
+        assert!(!activated.exited.load(Ordering::Relaxed));
+        assert_eq!(sm.active_count().await, 1);
+
+        sm.remove("persist-1").await;
+        assert_eq!(sm.total_count().await, 0);
     }
 }

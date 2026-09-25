@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -59,7 +59,8 @@ pub async fn is_daemon_alive(info: &DaemonInfo) -> bool {
         return false;
     }
     let client = match reqwest::Client::builder()
-        .timeout(Duration::from_millis(600))
+        .timeout(Duration::from_millis(2000))
+        .no_proxy()
         .build()
     {
         Ok(c) => c,
@@ -67,10 +68,17 @@ pub async fn is_daemon_alive(info: &DaemonInfo) -> bool {
     };
 
     let health_url = format!("http://127.0.0.1:{}/api/health", info.port);
-    match client.get(&health_url).send().await {
-        Ok(resp) => resp.status().is_success(),
-        Err(_) => false,
+    for attempt in 0..3 {
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        if let Ok(resp) = client.get(&health_url).send().await {
+            if resp.status().is_success() {
+                return true;
+            }
+        }
     }
+    false
 }
 
 pub fn read_daemon_info() -> Option<DaemonInfo> {
@@ -104,9 +112,43 @@ pub async fn ensure_daemon_running() -> Result<DaemonInfo, String> {
         if is_daemon_alive(&info).await {
             println!("[termi] Connecting to existing background daemon on port {}", info.port);
             return Ok(info);
-        } else {
-            println!("[termi] Stale daemon file found (pid {}). Cleaning up...", info.pid);
-            remove_daemon_file();
+        } else if is_process_alive(info.pid) {
+            println!("[termi] Daemon process {} alive, waiting for response...", info.pid);
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+            if is_daemon_alive(&info).await {
+                println!("[termi] Connecting to existing background daemon on port {}", info.port);
+                return Ok(info);
+            }
+        }
+        println!("[termi] Stale daemon file found (pid {}). Cleaning up...", info.pid);
+        remove_daemon_file();
+    }
+
+    // Check if an existing daemon is already listening on default port 3200 before spawning
+    let default_port = 3200;
+    if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_millis(1000)).no_proxy().build() {
+        let health_url = format!("http://127.0.0.1:{default_port}/api/health");
+        if let Ok(resp) = client.get(&health_url).send().await {
+            if resp.status().is_success() {
+                let info_url = format!("http://127.0.0.1:{default_port}/api/daemon/info");
+                if let Ok(info_resp) = client.get(&info_url).send().await {
+                    if let Ok(json) = info_resp.json::<serde_json::Value>().await {
+                        if let Some(pid) = json.get("pid").and_then(|v| v.as_u64()) {
+                            let recovered_info = DaemonInfo {
+                                pid: pid as u32,
+                                port: default_port,
+                                url: format!("http://127.0.0.1:{default_port}"),
+                                version: json.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                token: String::new(),
+                                started_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+                            };
+                            let _ = write_daemon_info(&recovered_info);
+                            println!("[termi] Reconnected to existing background daemon on port {default_port}");
+                            return Ok(recovered_info);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -186,6 +228,7 @@ pub async fn ensure_daemon_running() -> Result<DaemonInfo, String> {
 pub async fn stop_daemon(info: &DaemonInfo) -> Result<(), String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
+        .no_proxy()
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -218,14 +261,17 @@ pub async fn stop_daemon(info: &DaemonInfo) -> Result<(), String> {
 
 pub async fn get_daemon_session_count(info: &DaemonInfo) -> Result<usize, String> {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(800))
+        .timeout(Duration::from_millis(1500))
+        .no_proxy()
         .build()
         .map_err(|e| e.to_string())?;
 
     let url = format!("http://127.0.0.1:{}/api/daemon/session-count", info.port);
     let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
     let val: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let count = val.get("activeSessions").and_then(|v| v.as_u64()).unwrap_or(0);
+    let count = val.get("totalSessions").and_then(|v| v.as_u64())
+        .or_else(|| val.get("activeSessions").and_then(|v| v.as_u64()))
+        .unwrap_or(0);
     Ok(count as usize)
 }
 

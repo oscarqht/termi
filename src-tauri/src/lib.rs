@@ -60,6 +60,7 @@ pub fn run_daemon() {
         }
 
         // Install OS signal handler for graceful cleanup
+        let sm_for_signal = sm.clone();
         tokio::spawn(async move {
             #[cfg(unix)]
             {
@@ -83,6 +84,7 @@ pub fn run_daemon() {
                 let _ = tokio::signal::ctrl_c().await;
                 println!("[termi-daemon] Received Ctrl+C, exiting...");
             }
+            sm_for_signal.persist_sessions().await;
             daemon::remove_daemon_file();
             std::process::exit(0);
         });
@@ -97,6 +99,7 @@ pub fn run_daemon() {
             }
         }
 
+        sm.persist_sessions().await;
         daemon::remove_daemon_file();
         println!("[termi-daemon] Daemon stopped cleanly.");
     });

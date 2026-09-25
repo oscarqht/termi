@@ -446,17 +446,21 @@ async fn health_check() -> Json<serde_json::Value> {
 
 async fn daemon_info_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let count = state.session_manager.active_count().await;
+    let total = state.session_manager.total_count().await;
     Json(serde_json::json!({
         "pid": std::process::id(),
         "version": env!("CARGO_PKG_VERSION"),
-        "activeSessions": count
+        "activeSessions": count,
+        "totalSessions": total
     }))
 }
 
 async fn daemon_session_count_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let count = state.session_manager.active_count().await;
+    let total = state.session_manager.total_count().await;
     Json(serde_json::json!({
-        "activeSessions": count
+        "activeSessions": count,
+        "totalSessions": total
     }))
 }
 

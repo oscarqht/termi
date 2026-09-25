@@ -4939,7 +4939,7 @@ dependencies = [
 
 [[package]]
 name = "termi"
-version = "0.36.0"
+version = "0.39.0"
 dependencies = [
  "axum",
  "dirs 6.0.0",
