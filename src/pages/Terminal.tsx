@@ -290,11 +290,16 @@ export default function Terminal() {
     return sessions.filter((s) => isSameCwd(s.cwd, cwd, defaultCwd));
   }, [sessions, cwd, defaultCwd]);
 
-  function resumeSession(id: string, sessionCwd?: string) {
+  function resumeSession(id: string, sessionCwd?: string, inNewTab = false) {
     const params = new URLSearchParams();
     params.set('session', id);
     if (sessionCwd) params.set('cwd', sessionCwd);
-    window.location.href = `/term?${params.toString()}`;
+    const url = `/term?${params.toString()}`;
+    if (inNewTab) {
+      window.open(url, '_blank');
+    } else {
+      window.location.href = url;
+    }
   }
 
   async function closeSession(id: string) {
@@ -1213,7 +1218,38 @@ export default function Terminal() {
           ) : (
             <ul className="session-list">
               {matchingSessions.map((s) => (
-                <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
+                <li
+                  key={s.id}
+                  className={`session-item ${s.connected ? 'connected' : 'disconnected'}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    const selection = window.getSelection()?.toString();
+                    if (selection && selection.length > 0) return;
+                    if (e.metaKey || e.ctrlKey) {
+                      resumeSession(s.id, s.cwd, true);
+                    } else {
+                      resumeSession(s.id, s.cwd, false);
+                    }
+                  }}
+                  onAuxClick={(e) => {
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      resumeSession(s.id, s.cwd, true);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      resumeSession(s.id, s.cwd, false);
+                    }
+                  }}
+                  title={
+                    s.title?.trim()
+                      ? `Resume "${s.title.trim()}" (Click to open, ⌘/Ctrl+click for new tab)`
+                      : `Resume session (Click to open, ⌘/Ctrl+click for new tab)`
+                  }
+                >
                   <div className="session-info">
                     <span className="dot" />
                     <div className="session-details">
@@ -1235,18 +1271,15 @@ export default function Terminal() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="session-actions">
-                    <button
-                      type="button"
-                      className="secondary small"
-                      onClick={() => resumeSession(s.id, s.cwd)}
-                    >
-                      Resume
-                    </button>
+                  <div className="session-actions" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       className="danger small"
-                      onClick={() => closeSession(s.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeSession(s.id);
+                      }}
+                      title="Close session"
                     >
                       Close
                     </button>
