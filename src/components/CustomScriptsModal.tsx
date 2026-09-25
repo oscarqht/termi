@@ -8,6 +8,7 @@ import {
   subscribeCustomScripts,
 } from '../customScripts';
 import { useCustomScriptExecution } from '../contexts/CustomScriptExecutionContext';
+import { Button, Badge } from './ui';
 
 interface CustomScriptsModalProps {
   isOpen: boolean;
@@ -177,7 +178,7 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
               className={`custom-scripts-tab ${activeTab === 'run' ? 'active' : ''}`}
               onClick={() => setActiveTab('run')}
             >
-              Run Scripts ({scripts.length})
+              Run Scripts <Badge variant="default">{scripts.length}</Badge>
             </button>
             <button
               type="button"
@@ -250,26 +251,28 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
                       </div>
                     </div>
                     <div className="custom-script-card-actions">
-                      <button
+                      <Button
                         type="button"
-                        className="script-btn script-btn-primary"
+                        variant="primary"
+                        size="sm"
                         onClick={() => handleRunScript(script)}
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polygon points="5 3 19 12 5 21 5 3" />
                         </svg>
                         <span>Run</span>
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="script-btn script-btn-secondary"
+                        variant="secondary"
+                        size="sm"
                         onClick={() => {
                           setActiveTab('manage');
                           handleStartEdit(script);
                         }}
                       >
                         Edit
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))
@@ -316,9 +319,10 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
                     />
                   </div>
 
-                  <button
+                  <Button
                     type="submit"
-                    className="script-btn script-btn-primary"
+                    variant="primary"
+                    size="sm"
                     disabled={!newName.trim() || !newContent.trim()}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -326,7 +330,7 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
                     <span>Save Script</span>
-                  </button>
+                  </Button>
                 </form>
               </div>
 
@@ -334,13 +338,14 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
               <div className="custom-script-manage-list">
                 <div className="custom-scripts-subheading-row">
                   <h3 className="custom-scripts-subheading">Existing Custom Scripts ({filteredScripts.length})</h3>
-                  <button
+                  <Button
                     type="button"
-                    className="script-btn script-btn-secondary script-btn-sm"
+                    variant="secondary"
+                    size="sm"
                     onClick={handleResetDefaults}
                   >
                     Reset Defaults
-                  </button>
+                  </Button>
                 </div>
 
                 {filteredScripts.length === 0 ? (
@@ -386,21 +391,23 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
                         </div>
 
                         <div className="script-edit-actions">
-                          <button
+                          <Button
                             type="button"
-                            className="script-btn script-btn-primary"
+                            variant="primary"
+                            size="sm"
                             onClick={handleSaveEdit}
                             disabled={!editName.trim() || !editContent.trim()}
                           >
                             Save Changes
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
-                            className="script-btn script-btn-secondary"
+                            variant="secondary"
+                            size="sm"
                             onClick={handleCancelEdit}
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     );

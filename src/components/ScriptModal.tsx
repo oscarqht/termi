@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useCustomScriptExecution, ScriptExecutionStatus } from '../contexts/CustomScriptExecutionContext';
+import { Button, Badge } from './ui';
 
 export const ScriptModal: React.FC = () => {
   const {
@@ -88,10 +88,10 @@ export const ScriptModal: React.FC = () => {
   const getStatusBadge = () => {
     if (execution.isCanceling) {
       return (
-        <span className="script-badge script-badge-warning">
-          <span className="script-spinner" />
+        <Badge variant="warning">
+          <span className="script-spinner script-spinner-warning" />
           {execution.isForceCanceling ? 'Force stopping...' : 'Stopping...'}
-        </span>
+        </Badge>
       );
     }
 
@@ -99,38 +99,38 @@ export const ScriptModal: React.FC = () => {
       case 'starting':
       case 'running':
         return (
-          <span className="script-badge script-badge-info">
-            <span className="script-spinner" />
+          <Badge variant="info">
+            <span className="script-spinner script-spinner-info" />
             Running
-          </span>
+          </Badge>
         );
       case 'completed':
         return (
-          <span className="script-badge script-badge-success">
+          <Badge variant="success">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
             Completed
-          </span>
+          </Badge>
         );
       case 'failed':
         return (
-          <span className="script-badge script-badge-error">
+          <Badge variant="danger">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
             Failed
-          </span>
+          </Badge>
         );
       case 'canceled':
         return (
-          <span className="script-badge script-badge-warning">
+          <Badge variant="warning">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="10" />
               <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
             </svg>
             Canceled
-          </span>
+          </Badge>
         );
       default:
         return null;
@@ -158,82 +158,86 @@ export const ScriptModal: React.FC = () => {
 
             {/* Action controls */}
             <div className="script-modal-actions">
-              <button
+              <Button
                 type="button"
-                className="script-btn script-btn-secondary"
+                variant="secondary"
+                size="sm"
                 onClick={handleCopyLogs}
                 disabled={!execution.output}
                 title="Copy Terminal Logs"
               >
                 {copied ? (
                   <>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                     <span>Copied</span>
                   </>
                 ) : (
                   <>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                     </svg>
                     <span>Copy</span>
                   </>
                 )}
-              </button>
+              </Button>
 
               {isFinished && (
-                <button
+                <Button
                   type="button"
-                  className="script-btn script-btn-primary"
+                  variant="primary"
+                  size="sm"
                   onClick={handleRerun}
                   disabled={isRerunning}
                   title="Re-run Script"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M1 4v6h6" />
                     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                   </svg>
                   <span>Re-run</span>
-                </button>
+                </Button>
               )}
 
               {isRunning && (
                 <>
                   {!execution.isCanceling ? (
-                    <button
+                    <Button
                       type="button"
-                      className="script-btn script-btn-danger"
+                      variant="danger"
+                      size="sm"
                       onClick={() => handleStop(false)}
                       title="Stop Execution (SIGTERM)"
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="6" y="6" width="12" height="12" rx="1" />
                       </svg>
                       <span>Stop</span>
-                    </button>
+                    </Button>
                   ) : (
-                    <button
+                    <Button
                       type="button"
-                      className="script-btn script-btn-danger"
+                      variant="danger"
+                      size="sm"
                       onClick={() => handleStop(true)}
                       title="Force Kill Process Immediately (SIGKILL)"
                     >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
                         <line x1="15" y1="9" x2="9" y2="15" />
                         <line x1="9" y1="9" x2="15" y2="15" />
                       </svg>
                       <span>Force Kill</span>
-                    </button>
+                    </Button>
                   )}
                 </>
               )}
 
               <button
                 type="button"
-                className="script-btn script-btn-icon"
+                className="icon-button"
                 onClick={minimizeModal}
                 title="Minimize to Dock"
               >
@@ -244,7 +248,7 @@ export const ScriptModal: React.FC = () => {
 
               <button
                 type="button"
-                className="script-btn script-btn-icon"
+                className="icon-button"
                 onClick={() => {
                   if (isRunning) {
                     minimizeModal();

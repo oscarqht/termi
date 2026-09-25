@@ -2648,16 +2648,78 @@ button.common-cmd-remove-btn:hover {
    Custom Scripts & Execution Runner (ScriptModal & ScriptDock)
    ======================================================== */
 
+/* Home Dashboard - Custom Scripts Card */
+.custom-scripts-home-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.custom-script-home-item {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.custom-script-home-item:hover {
+  border-color: var(--border-surface-active);
+}
+
+.custom-script-home-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.custom-script-home-item-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+
+.custom-script-home-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.custom-script-home-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.custom-script-home-preview {
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+
+.custom-script-home-preview code {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: pre;
+  display: block;
+}
+
 .custom-scripts-modal-dialog {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--card-radius, 12px);
   width: 90%;
   max-width: 680px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--card-shadow), 0 20px 48px rgba(0, 0, 0, 0.5);
   overflow: hidden;
   animation: modalFadeIn 0.15s ease-out;
 }
@@ -2698,7 +2760,7 @@ button.common-cmd-remove-btn:hover {
   gap: 12px;
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-surface-elevated);
   flex-wrap: wrap;
 }
 
@@ -2711,7 +2773,7 @@ button.common-cmd-remove-btn:hover {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-radius: 6px;
   font-size: 0.82rem;
   font-weight: 500;
@@ -2721,14 +2783,15 @@ button.common-cmd-remove-btn:hover {
 
 .custom-scripts-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .custom-scripts-tab.active {
   color: var(--text-primary);
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface);
   border-color: var(--border-subtle);
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .custom-scripts-search {
@@ -2741,6 +2804,12 @@ button.common-cmd-remove-btn:hover {
   padding: 4px 8px;
   min-width: 180px;
   color: var(--text-secondary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.custom-scripts-search:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: var(--focus-ring);
 }
 
 .custom-scripts-search input {
@@ -3025,26 +3094,28 @@ button.common-cmd-remove-btn:hover {
 
 .script-modal-backdrop {
   z-index: 1200;
+  backdrop-filter: blur(12px);
+  background: rgba(11, 15, 25, 0.75);
 }
 
 .script-modal-dialog {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--card-radius, 12px);
   width: 92%;
   max-width: 860px;
   height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
   overflow: hidden;
   animation: modalFadeIn 0.15s ease-out;
 }
 
 .script-modal-header {
   padding: 1rem 1.25rem;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
+  background: var(--bg-surface-elevated);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .script-modal-title-row {
@@ -3069,7 +3140,7 @@ button.common-cmd-remove-btn:hover {
 .script-modal-name {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
 }
 
 .script-modal-cwd {
@@ -3077,7 +3148,7 @@ button.common-cmd-remove-btn:hover {
   align-items: center;
   gap: 5px;
   font-size: 0.76rem;
-  color: #8b949e;
+  color: var(--text-secondary);
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3093,7 +3164,7 @@ button.common-cmd-remove-btn:hover {
 
 .script-modal-body {
   flex: 1;
-  background: #000000;
+  background: #070a10;
   padding: 1rem 1.25rem;
   overflow-y: auto;
   user-select: text;
@@ -3113,7 +3184,7 @@ button.common-cmd-remove-btn:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #8b949e;
+  color: var(--text-muted);
   font-size: 0.85rem;
   font-family: ui-monospace, monospace;
   padding: 1rem 0;
@@ -3132,27 +3203,27 @@ button.common-cmd-remove-btn:hover {
 }
 
 .script-badge-info {
-  background: rgba(56, 139, 253, 0.15);
-  color: #58a6ff;
-  border: 1px solid rgba(56, 139, 253, 0.3);
+  background: rgba(2, 132, 199, 0.2);
+  color: #38bdf8;
+  border: 1px solid rgba(2, 132, 199, 0.3);
 }
 
 .script-badge-success {
-  background: rgba(46, 160, 67, 0.15);
-  color: #3fb950;
-  border: 1px solid rgba(46, 160, 67, 0.3);
+  background: rgba(34, 197, 94, 0.18);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
 }
 
 .script-badge-error {
-  background: rgba(248, 81, 73, 0.15);
-  color: #f85149;
-  border: 1px solid rgba(248, 81, 73, 0.3);
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .script-badge-warning {
-  background: rgba(210, 153, 34, 0.15);
-  color: #e3b341;
-  border: 1px solid rgba(210, 153, 34, 0.3);
+  background: rgba(234, 179, 8, 0.18);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.25);
 }
 
 .script-spinner {
@@ -3167,11 +3238,11 @@ button.common-cmd-remove-btn:hover {
 }
 
 .script-spinner-info {
-  color: #58a6ff;
+  color: var(--link-color);
 }
 
 .script-spinner-warning {
-  color: #e3b341;
+  color: var(--banner-warning-bg);
 }
 
 @keyframes scriptSpin {
@@ -3199,27 +3270,27 @@ button.common-cmd-remove-btn:hover {
 
 .script-dock-card {
   pointer-events: auto;
-  background: #161b22;
-  border: 1px solid #30363d;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 10px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  box-shadow: var(--card-shadow), 0 10px 25px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .script-dock-card:hover {
-  border-color: #58a6ff;
+  border-color: var(--border-surface-active);
   transform: translateY(-1px);
 }
 
 .script-dock-card-running {
-  border-color: rgba(88, 166, 255, 0.4);
+  border-color: rgba(56, 189, 248, 0.4);
 }
 
 .script-dock-content {
@@ -3245,15 +3316,15 @@ button.common-cmd-remove-btn:hover {
 }
 
 .script-dock-icon-success {
-  color: #3fb950;
+  color: var(--dot-connected);
 }
 
 .script-dock-icon-error {
-  color: #f85149;
+  color: var(--error-color);
 }
 
 .script-dock-icon-warning {
-  color: #e3b341;
+  color: var(--banner-warning-bg);
 }
 
 .script-dock-text {
@@ -3264,7 +3335,7 @@ button.common-cmd-remove-btn:hover {
 .script-dock-name {
   font-size: 0.84rem;
   font-weight: 600;
-  color: #f0f6fc;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3272,7 +3343,7 @@ button.common-cmd-remove-btn:hover {
 
 .script-dock-sub {
   font-size: 0.72rem;
-  color: #8b949e;
+  color: var(--text-secondary);
   margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3280,7 +3351,7 @@ button.common-cmd-remove-btn:hover {
 }
 
 .script-dock-cwd {
-  color: #58a6ff;
+  color: var(--link-color);
 }
 
 .script-dock-actions {
@@ -3293,7 +3364,7 @@ button.common-cmd-remove-btn:hover {
 .script-btn-icon-sm {
   background: transparent;
   border: none;
-  color: #8b949e;
+  color: var(--text-secondary);
   padding: 5px;
   border-radius: 4px;
   cursor: pointer;
@@ -3304,13 +3375,13 @@ button.common-cmd-remove-btn:hover {
 }
 
 .script-btn-icon-sm:hover {
-  color: #f0f6fc;
+  color: var(--text-primary);
   background: rgba(255, 255, 255, 0.08);
 }
 
 .script-btn-icon-danger:hover {
-  color: #f85149;
-  background: rgba(248, 81, 73, 0.15);
+  color: var(--error-color);
+  background: var(--toolbar-danger-bg);
 }
 
 @keyframes slideInRight {
@@ -3323,3 +3394,4 @@ button.common-cmd-remove-btn:hover {
     transform: translateX(0);
   }
 }
+

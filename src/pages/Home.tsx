@@ -15,6 +15,13 @@ import {
 } from '../savedPrompts';
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
 import { CustomScriptsModal } from '../components/CustomScriptsModal';
+import {
+  type CustomScript,
+  loadCustomScripts,
+  fetchCustomScripts,
+  subscribeCustomScripts,
+} from '../customScripts';
+import { useCustomScriptExecution } from '../contexts/CustomScriptExecutionContext';
 import HeaderUpdater from '../components/HeaderUpdater';
 import { abbreviatePath, formatPathDisplay, isSameCwd } from '../pathUtils';
 import { Card, Button, Badge, Header } from '../components/ui';
@@ -66,6 +73,8 @@ export default function Home() {
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
   const [recentCmds, setRecentCmds] = useState<string[]>([]);
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>(() => loadSavedPrompts());
+  const [customScripts, setCustomScripts] = useState<CustomScript[]>(() => loadCustomScripts());
+  const { startScript } = useCustomScriptExecution();
   const [savedPromptsModalOpen, setSavedPromptsModalOpen] = useState(false);
   const [customScriptsModalOpen, setCustomScriptsModalOpen] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
@@ -148,8 +157,11 @@ export default function Home() {
 
     fetchSavedPrompts().then(setSavedPrompts);
     const unsubPrompts = subscribeSavedPrompts(setSavedPrompts);
+    fetchCustomScripts().then(setCustomScripts);
+    const unsubCustomScripts = subscribeCustomScripts(setCustomScripts);
     return () => {
       unsubPrompts();
+      unsubCustomScripts();
     };
   }, []);
 
@@ -739,6 +751,67 @@ export default function Home() {
             >
               + Add prompt
             </Button>
+          </div>
+        </Card>
+
+        <Card
+          title="Custom Scripts"
+          subtitle="Reusable bash automation scripts executed in your working directory"
+          badge={
+            <Badge variant="info">
+              {customScripts.length}
+            </Badge>
+          }
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          }
+          extra={
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setCustomScriptsModalOpen(true)}
+            >
+              Manage scripts
+            </Button>
+          }
+        >
+          <div className="custom-scripts-home-list" style={{ marginTop: '0.25rem' }}>
+            {customScripts.map((script) => (
+              <div key={script.id} className="custom-script-home-item">
+                <div className="custom-script-home-item-header">
+                  <span className="custom-script-home-item-title">{script.name}</span>
+                  <div className="custom-script-home-item-actions">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={() => startScript({ cwd: cwd.trim() || defaultCwd, script })}
+                      title={`Run ${script.name} in ${cwd.trim() || defaultCwd || 'working directory'}`}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                      Run
+                    </Button>
+                  </div>
+                </div>
+                {script.description && (
+                  <div className="custom-script-home-desc">{script.description}</div>
+                )}
+                <div className="custom-script-home-preview">
+                  <code>{script.content.trim().split('\n').slice(0, 2).join('\n')}</code>
+                </div>
+              </div>
+            ))}
+            {customScripts.length === 0 && (
+              <p className="muted" style={{ margin: '0.5rem 0' }}>
+                No custom scripts yet. Click <strong>Manage scripts</strong> to add one or reset defaults.
+              </p>
+            )}
           </div>
         </Card>
       </div>
