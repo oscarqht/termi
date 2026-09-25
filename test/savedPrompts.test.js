@@ -4,10 +4,6 @@ import {
   DEFAULT_SAVED_PROMPTS,
   parseSavedPrompts,
 } from '../src/savedPrompts.ts';
-import {
-  DEFAULT_SAVED_PROMPTS as SERVER_DEFAULT_PROMPTS,
-  getPromptsFilePath,
-} from '../server/promptsManager.js';
 
 test('parseSavedPrompts returns defaults when raw is empty or null', () => {
   assert.equal(parseSavedPrompts(null).length, DEFAULT_SAVED_PROMPTS.length);
@@ -55,11 +51,4 @@ test('parseSavedPrompts filters out empty items and auto-assigns id if missing',
   assert.ok(parsed[0].id.startsWith('prompt-'));
   assert.equal(parsed[1].title, '');
   assert.equal(parsed[1].content, 'Content only without title');
-});
-
-test('server and client have consistent default prompts and standard path', () => {
-  assert.deepEqual(DEFAULT_SAVED_PROMPTS, SERVER_DEFAULT_PROMPTS);
-  const filePath = getPromptsFilePath();
-  assert.ok(filePath.includes('prompts.json'));
-  assert.ok(filePath.includes('termi'));
 });

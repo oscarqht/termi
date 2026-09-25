@@ -1,10 +1,10 @@
 # termi
 
-A browser-based terminal. Runs a small Node server that spawns real PTY sessions and streams them to a React + xterm.js frontend over WebSockets, so you can open a terminal from any browser on your Tailscale network.
+A lightweight desktop status bar app & browser-accessible terminal. Runs an embedded high-performance Rust daemon (Axum + portable-pty) that spawns real PTY sessions and streams them to a React + xterm.js frontend over WebSockets, so you can open terminals locally or from any browser on your Tailscale network.
 
 ## Features
 
-- Real shell sessions via `node-pty`, multiplexed over WebSocket
+- Real shell sessions via `portable-pty`, multiplexed over WebSocket
 - Multiple concurrent sessions, each with its own working directory and optional initial command(s)
 - Native macOS folder picker for choosing a session's working directory
 - Per-session local scrollback history
