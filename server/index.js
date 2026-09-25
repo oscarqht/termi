@@ -316,8 +316,10 @@ async function handleApi(req, res, url) {
       return true;
     }
 
+    const executionId = body.executionId || body.execution_id;
+
     if (command === 'status') {
-      const execution = getExecution(body.executionId);
+      const execution = getExecution(executionId);
       if (!execution) {
         res.statusCode = 404;
         res.setHeader('Content-Type', 'application/json');
@@ -330,7 +332,7 @@ async function handleApi(req, res, url) {
     }
 
     if (command === 'cancel') {
-      const execution = cancelExecution(body.executionId, !!body.force);
+      const execution = cancelExecution(executionId, !!body.force);
       if (!execution) {
         res.statusCode = 404;
         res.setHeader('Content-Type', 'application/json');
@@ -343,7 +345,7 @@ async function handleApi(req, res, url) {
     }
 
     if (command === 'dismiss') {
-      dismissExecution(body.executionId);
+      dismissExecution(executionId);
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true }));
       return true;
@@ -353,8 +355,8 @@ async function handleApi(req, res, url) {
       try {
         const execution = startExecution({
           cwd: body.cwd,
-          scriptName: body.scriptName,
-          scriptContent: body.scriptContent,
+          scriptName: body.scriptName || body.script_name,
+          scriptContent: body.scriptContent || body.script_content,
         });
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ success: true, ...execution }));

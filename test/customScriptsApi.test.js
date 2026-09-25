@@ -55,7 +55,12 @@ describe('Custom Scripts HTTP API routes', () => {
         req.on('end', async () => {
           try {
             const payload = JSON.parse(body || '{}');
-            const { command, executionId, cwd, scriptName, scriptContent, force } = payload;
+            const command = payload.command;
+            const executionId = payload.executionId || payload.execution_id;
+            const cwd = payload.cwd;
+            const scriptName = payload.scriptName || payload.script_name;
+            const scriptContent = payload.scriptContent || payload.script_content;
+            const force = payload.force;
 
             switch (command) {
               case 'list': {
@@ -218,6 +223,54 @@ describe('Custom Scripts HTTP API routes', () => {
       body: JSON.stringify({
         command: 'dismiss',
         executionId: startData.executionId,
+      }),
+    });
+    assert.strictEqual(dismissRes.status, 200);
+  });
+
+  test('POST /api/custom-scripts accepts snake_case execution_id, script_name, script_content', async () => {
+    const startRes = await fetch(`${baseUrl}/api/custom-scripts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: 'start',
+        script_name: 'Snake Case Echo',
+        script_content: 'echo "snake case works"',
+      }),
+    });
+
+    assert.strictEqual(startRes.status, 200);
+    const startData = await startRes.json();
+    assert.strictEqual(startData.success, true);
+    assert(startData.executionId);
+    assert.strictEqual(startData.scriptName, 'Snake Case Echo');
+
+    // Poll status using snake_case execution_id
+    let pollData;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const statusRes = await fetch(`${baseUrl}/api/custom-scripts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: 'status',
+          execution_id: startData.executionId,
+        }),
+      });
+      pollData = await statusRes.json();
+      if (pollData.status === 'completed' || pollData.status === 'failed') break;
+    }
+
+    assert.strictEqual(pollData.status, 'completed');
+    assert(pollData.output.includes('snake case works'));
+
+    // Dismiss using snake_case execution_id
+    const dismissRes = await fetch(`${baseUrl}/api/custom-scripts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: 'dismiss',
+        execution_id: startData.executionId,
       }),
     });
     assert.strictEqual(dismissRes.status, 200);

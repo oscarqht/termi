@@ -248,11 +248,15 @@ pub struct ExecutionResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CustomScriptPayload {
     pub command: String,
     pub cwd: Option<String>,
+    #[serde(alias = "script_name")]
     pub script_name: Option<String>,
+    #[serde(alias = "script_content")]
     pub script_content: Option<String>,
+    #[serde(alias = "execution_id")]
     pub execution_id: Option<String>,
     pub force: Option<bool>,
 }
