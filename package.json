@@ -1,6 +1,6 @@
 {
   "name": "termi",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "description": "A cross-platform status bar terminal app",
   "author": "oscarqht",
   "private": true,
