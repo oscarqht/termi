@@ -2766,19 +2766,28 @@ button.common-cmd-remove-btn:hover {
 
 .custom-scripts-tabs {
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 
 .custom-scripts-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  padding: 5px 12px;
+  padding: 0 14px;
   border-radius: 6px;
   font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+  line-height: 1;
 }
 
 .custom-scripts-tab:hover {
@@ -2798,10 +2807,12 @@ button.common-cmd-remove-btn:hover {
   display: flex;
   align-items: center;
   gap: 6px;
+  height: 34px;
+  box-sizing: border-box;
   background: var(--bg-input);
   border: 1px solid var(--border-input);
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 0 10px;
   min-width: 180px;
   color: var(--text-secondary);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;

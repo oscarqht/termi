@@ -178,14 +178,15 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
               className={`custom-scripts-tab ${activeTab === 'run' ? 'active' : ''}`}
               onClick={() => setActiveTab('run')}
             >
-              Run Scripts <Badge variant="default">{scripts.length}</Badge>
+              <span>Run Scripts</span>
+              <Badge variant="default">{scripts.length}</Badge>
             </button>
             <button
               type="button"
               className={`custom-scripts-tab ${activeTab === 'manage' ? 'active' : ''}`}
               onClick={() => setActiveTab('manage')}
             >
-              Manage & Create
+              <span>Manage & Create</span>
             </button>
           </div>
 
