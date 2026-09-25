@@ -31,6 +31,7 @@ export type SessionInfo = {
   cwd: string;
   cmd: string;
   title?: string;
+  terminalTitle?: string;
   createdAt: number;
   connected: boolean;
   dormant?: boolean;
@@ -647,6 +648,10 @@ export default function Home() {
                         <div className="session-title" title={s.title.trim()}>
                           {s.title.trim()}
                           {s.dormant && <span style={{ marginLeft: 6, fontSize: '0.75rem', opacity: 0.6 }}>(Restored)</span>}
+                        </div>
+                      ) : s.terminalTitle?.trim() ? (
+                        <div className="session-title" title={s.terminalTitle.trim()}>
+                          {s.terminalTitle.trim()}
                         </div>
                       ) : s.dormant ? (
                         <div className="session-title" style={{ fontSize: '0.75rem', opacity: 0.6 }}>(Restored session)</div>

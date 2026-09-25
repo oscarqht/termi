@@ -22,6 +22,7 @@ import {
   killSession,
   ensureUploadDir,
   updateSessionTitle,
+  updateSessionTerminalTitle,
 } from './sessionManager.js';
 import {
   loadRecentCwds,
@@ -158,7 +159,13 @@ async function handleApi(req, res, url) {
       return true;
     }
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ id: session.id, cwd: session.cwd, cmd: session.cmd, title: session.title || '' }));
+    res.end(JSON.stringify({
+      id: session.id,
+      cwd: session.cwd,
+      cmd: session.cmd,
+      title: session.title || '',
+      terminalTitle: session.terminalTitle || '',
+    }));
     return true;
   }
 
@@ -612,6 +619,8 @@ export async function startServer(options = {}) {
             writeToSession(session, msg.data);
           } else if (msg.type === 'resize') {
             resizeSession(session, msg.cols, msg.rows);
+          } else if (msg.type === 'terminal_title') {
+            updateSessionTerminalTitle(session.id, msg.title);
           }
         } catch (err) {
           console.warn('[termi] Error handling message:', err.message);

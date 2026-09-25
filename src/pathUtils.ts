@@ -46,3 +46,12 @@ export function abbreviatePath(p: string, homeDir = ''): string {
   return displayPath;
 }
 
+export function getFolderName(dirPath: string): string {
+  const trimmed = (dirPath || '').trim();
+  if (!trimmed) return '';
+  const stripped = trimmed.replace(/[/\\]+$/, '');
+  if (!stripped) return '/';
+  const parts = stripped.split(/[/\\]/);
+  return parts[parts.length - 1] || stripped;
+}
+

@@ -746,6 +746,10 @@ async fn handle_ws_socket(socket: WebSocket, session: Arc<Session>) {
                             let cols = val.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
                             let rows = val.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
                             session_for_recv.resize(cols, rows);
+                        } else if msg_type == "terminal_title" {
+                            if let Some(title) = val.get("title").and_then(|v| v.as_str()) {
+                                *session_for_recv.terminal_title.write().await = title.to_string();
+                            }
                         }
                     }
                 }

@@ -17,6 +17,8 @@ pub struct SessionInfo {
     pub cwd: String,
     pub cmd: String,
     pub title: String,
+    #[serde(default, rename = "terminalTitle")]
+    pub terminal_title: String,
     #[serde(rename = "createdAt")]
     pub created_at: u64,
     pub connected: bool,
@@ -129,6 +131,7 @@ pub struct Session {
     pub cwd: String,
     pub cmd: String,
     pub title: RwLock<String>,
+    pub terminal_title: RwLock<String>,
     pub created_at: u64,
     pub buffer: RwLock<OutputBuffer>,
     pub client_count: AtomicUsize,
@@ -168,11 +171,13 @@ impl Session {
 
     pub fn get_info(&self) -> SessionInfo {
         let title = self.title.try_read().map(|t| t.clone()).unwrap_or_default();
+        let terminal_title = self.terminal_title.try_read().map(|t| t.clone()).unwrap_or_default();
         SessionInfo {
             id: self.id.clone(),
             cwd: self.cwd.clone(),
             cmd: self.cmd.clone(),
             title,
+            terminal_title,
             created_at: self.created_at,
             connected: self.client_count.load(Ordering::Relaxed) > 0,
             dormant: self.dormant.load(Ordering::Relaxed),
@@ -420,6 +425,7 @@ impl SessionManager {
                 cwd: r.cwd.clone(),
                 cmd: r.cmd.clone(),
                 title: RwLock::new(r.title.clone()),
+                terminal_title: RwLock::new(String::new()),
                 created_at: r.created_at,
                 buffer: RwLock::new(OutputBuffer::new(BUFFER_MAX_CHARS)),
                 client_count: AtomicUsize::new(0),
@@ -504,6 +510,22 @@ impl SessionManager {
         }
     }
 
+    pub async fn update_terminal_title(&self, id: &str, terminal_title: String) -> Option<SessionInfo> {
+        let session = {
+            let map = self.sessions.read().await;
+            map.get(id).cloned()
+        };
+        if let Some(s) = session {
+            {
+                let mut t = s.terminal_title.write().await;
+                *t = terminal_title;
+            }
+            Some(s.get_info())
+        } else {
+            None
+        }
+    }
+
     pub async fn create(
         self: &Arc<Self>,
         cwd: String,
@@ -524,6 +546,7 @@ impl SessionManager {
             cwd: cwd.clone(),
             cmd: cmd.clone(),
             title: RwLock::new(title.trim().to_string()),
+            terminal_title: RwLock::new(String::new()),
             created_at: now,
             buffer: RwLock::new(OutputBuffer::new(BUFFER_MAX_CHARS)),
             client_count: AtomicUsize::new(0),
@@ -632,6 +655,7 @@ mod tests {
             cwd: default_cwd(),
             cmd: "".to_string(),
             title: RwLock::new("Dormant Shell".to_string()),
+            terminal_title: RwLock::new(String::new()),
             created_at: 1700000000,
             buffer: RwLock::new(OutputBuffer::new(1000)),
             client_count: AtomicUsize::new(0),
@@ -650,6 +674,12 @@ mod tests {
         let info = sm.get("dormant-1").await.unwrap().get_info();
         assert!(info.dormant);
         assert_eq!(info.title, "Dormant Shell");
+        assert_eq!(info.terminal_title, "");
+
+        // Updating terminal title
+        sm.update_terminal_title("dormant-1", "vim test.rs".to_string()).await;
+        let info_updated = sm.get("dormant-1").await.unwrap().get_info();
+        assert_eq!(info_updated.terminal_title, "vim test.rs");
 
         // Activating the session spawns the PTY and clears dormant
         let activated = sm.activate("dormant-1").await.expect("Failed to activate");
@@ -671,6 +701,7 @@ mod tests {
             cwd: default_cwd(),
             cmd: "".to_string(),
             title: RwLock::new("Persisted Shell".to_string()),
+            terminal_title: RwLock::new(String::new()),
             created_at: 1700000000,
             buffer: RwLock::new(OutputBuffer::new(1000)),
             client_count: AtomicUsize::new(0),

@@ -59,6 +59,7 @@ export function listSessions() {
     cwd: s.cwd,
     cmd: s.cmd,
     title: s.title || '',
+    terminalTitle: s.terminalTitle || '',
     createdAt: s.createdAt,
     connected: s.clients.size > 0,
   }));
@@ -90,6 +91,7 @@ export function createSession({ cwd, cmd, title }) {
     cwd,
     cmd,
     title: typeof title === 'string' ? title.trim() : '',
+    terminalTitle: '',
     createdAt: Date.now(),
     pty: term,
     buffer: new OutputBuffer(BUFFER_MAX_CHARS),
@@ -145,6 +147,13 @@ export function updateSessionTitle(id, title) {
   const session = sessions.get(id);
   if (!session) return null;
   session.title = typeof title === 'string' ? title.trim() : '';
+  return session;
+}
+
+export function updateSessionTerminalTitle(id, terminalTitle) {
+  const session = sessions.get(id);
+  if (!session) return null;
+  session.terminalTitle = typeof terminalTitle === 'string' ? terminalTitle.trim() : '';
   return session;
 }
 

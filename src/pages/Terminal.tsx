@@ -12,6 +12,7 @@ import { isSameCwd } from '../pathUtils';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
 import { CopyableCode, copyTextToClipboard } from '../components/CopyableCode';
 import { setupTerminalTouchScroll } from '../terminalTouchScroll';
+import { resolveSessionTitle, sanitizeTerminalTitle } from '../terminalTitleUtils';
 
 type Phase = 'confirm' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'exited' | 'error';
 
@@ -111,20 +112,19 @@ function setSessionParam(id: string) {
   window.history.replaceState(null, '', url.toString());
 }
 
-export function getFolderName(dirPath: string): string {
-  const trimmed = dirPath.trim();
-  if (!trimmed) return '';
-  const stripped = trimmed.replace(/[/\\]+$/, '');
-  if (!stripped) return '/';
-  const parts = stripped.split(/[/\\]/);
-  return parts[parts.length - 1] || stripped;
-}
+export { getFolderName } from '../pathUtils';
 
 
 export default function Terminal() {
   const initial = paramsFromLocation();
   const [cwd, setCwd] = useState(initial.cwd);
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
   const [sessionTitle, setSessionTitle] = useState('');
+  const [terminalTitle, setTerminalTitle] = useState('');
+  const terminalTitleRef = useRef(terminalTitle);
+  terminalTitleRef.current = terminalTitle;
+  const titleSyncTimeoutRef = useRef<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
@@ -144,19 +144,23 @@ export default function Terminal() {
   const [closingSession, setClosingSession] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
-  const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
+
+  const resolvedTitle = useMemo(() => {
+    return resolveSessionTitle({
+      customTitle: sessionTitle,
+      terminalTitle,
+      cwd,
+    });
+  }, [sessionTitle, terminalTitle, cwd]);
+
+  const currentTitle = resolvedTitle.displayTitle;
 
   useEffect(() => {
-    if (sessionTitle.trim()) {
-      document.title = sessionTitle.trim();
-    } else {
-      const folderName = getFolderName(cwd);
-      document.title = folderName ? `termi > ${folderName}` : 'termi';
-    }
+    document.title = resolvedTitle.documentTitle;
     return () => {
       document.title = 'termi';
     };
-  }, [cwd, sessionTitle]);
+  }, [resolvedTitle.documentTitle]);
   const [cmds, setCmds] = useState<string[]>(initial.cmds);
   const [cmd, setCmd] = useState(() => {
     const lastChoice = loadLastInitialCmd();
@@ -587,6 +591,11 @@ export default function Terminal() {
             ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
           } catch {}
         }
+        if (terminalTitleRef.current) {
+          try {
+            ws.send(JSON.stringify({ type: 'terminal_title', title: terminalTitleRef.current }));
+          } catch {}
+        }
       }
     };
 
@@ -660,6 +669,21 @@ export default function Terminal() {
       term.onScroll(updateScrollState);
       term.onWriteParsed(updateScrollState);
       term.onResize(updateScrollState);
+      term.onTitleChange((rawTitle) => {
+        const sanitized = sanitizeTerminalTitle(rawTitle, cwdRef.current);
+        if (sanitized !== terminalTitleRef.current) {
+          setTerminalTitle(sanitized);
+          if (titleSyncTimeoutRef.current) {
+            window.clearTimeout(titleSyncTimeoutRef.current);
+          }
+          titleSyncTimeoutRef.current = window.setTimeout(() => {
+            const ws = wsRef.current;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'terminal_title', title: sanitized }));
+            }
+          }, 150);
+        }
+      });
       if (editorOpenRef.current) {
         textEditorRef.current?.focus();
       } else if (!savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
@@ -725,6 +749,9 @@ export default function Terminal() {
           if (data?.title) {
             setSessionTitle(data.title);
           }
+          if (data?.terminalTitle) {
+            setTerminalTitle(data.terminalTitle);
+          }
         })
         .catch(() => {});
       connect(initial.session);
@@ -734,6 +761,10 @@ export default function Terminal() {
     return () => {
       isUnmountedRef.current = true;
       clearReconnectTimer();
+      if (titleSyncTimeoutRef.current) {
+        window.clearTimeout(titleSyncTimeoutRef.current);
+        titleSyncTimeoutRef.current = null;
+      }
       if (wsRef.current) {
         try {
           wsRef.current.onopen = null;
@@ -1222,6 +1253,10 @@ export default function Terminal() {
                           {s.title.trim()}
                           {s.dormant && <span style={{ marginLeft: 6, fontSize: '0.75rem', opacity: 0.6 }}>(Restored)</span>}
                         </div>
+                      ) : s.terminalTitle?.trim() ? (
+                        <div className="session-title" title={s.terminalTitle.trim()}>
+                          {s.terminalTitle.trim()}
+                        </div>
                       ) : s.dormant ? (
                         <div className="session-title" style={{ fontSize: '0.75rem', opacity: 0.6 }}>(Restored session)</div>
                       ) : null}
@@ -1358,7 +1393,7 @@ export default function Terminal() {
               <div className="session-switcher-list">
                 {sessions.map((s) => {
                   const isCurrent = s.id === activeSessionId;
-                  const itemTitle = s.title?.trim() || (s.cwd ? getFolderName(s.cwd) : 'termi');
+                  const itemTitle = s.title?.trim() || s.terminalTitle?.trim() || (s.cwd ? getFolderName(s.cwd) : 'termi');
                   return (
                     <button
                       key={s.id}
@@ -1586,7 +1621,7 @@ export default function Terminal() {
                   />
                 </label>
                 <p className="modal-help-text">
-                  Sets the browser tab title. Blank defaults to <code>termi &gt; &#123;folder&#125;</code>.
+                  Sets the session and browser tab title. Blank defaults to active program title or folder name.
                 </p>
               </div>
               <div className="modal-footer">
