@@ -9,11 +9,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures::{SinkExt, StreamExt};
 use rust_embed::RustEmbed;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
-
-use tauri::Manager;
 
 use crate::session::{default_cwd, Session, SessionInfo, SessionManager};
 
@@ -21,10 +19,19 @@ use crate::session::{default_cwd, Session, SessionInfo, SessionManager};
 #[folder = "../dist"]
 struct Assets;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum UpdaterAction {
+    Check,
+    Install,
+}
+
 pub struct AppState {
     pub session_manager: Arc<SessionManager>,
-    pub app_handle: tauri::AppHandle,
     pub custom_scripts_manager: Arc<crate::custom_scripts::CustomScriptManager>,
+    pub updater_status: Arc<tokio::sync::RwLock<crate::updater::UpdateStatus>>,
+    pub pending_updater_action: Arc<tokio::sync::Mutex<Option<UpdaterAction>>>,
+    pub token: String,
+    pub shutdown_tx: tokio::sync::broadcast::Sender<()>,
 }
 
 pub fn resolve_host() -> String {
@@ -378,34 +385,116 @@ async fn handle_custom_scripts_command(
 }
 
 async fn get_updater_status(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let update_state = state.app_handle.state::<crate::updater::UpdateState>();
-    let mgr = update_state.0.lock().await;
-    let current_version = state.app_handle.package_info().version.to_string();
+    let mgr_status = state.updater_status.read().await.clone();
+    let current_version = env!("CARGO_PKG_VERSION");
     Json(serde_json::json!({
         "current_version": current_version,
-        "status": mgr.status,
+        "status": mgr_status,
     }))
 }
 
 async fn check_updater(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
-    let handle = state.app_handle.clone();
-    tauri::async_runtime::spawn(async move {
-        crate::updater::check_and_download(&handle, false, true).await;
-    });
+    let mut pending = state.pending_updater_action.lock().await;
+    *pending = Some(UpdaterAction::Check);
     Json(serde_json::json!({ "success": true }))
 }
 
 async fn install_updater(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    let handle = state.app_handle.clone();
-    match crate::updater::install_and_relaunch_inner(&handle).await {
-        Ok(_) => Ok(Json(serde_json::json!({ "success": true }))),
-        Err(err) => Err((
+    let mut pending = state.pending_updater_action.lock().await;
+    *pending = Some(UpdaterAction::Install);
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+async fn get_updater_action(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !verify_token(&state, &headers) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let mut pending = state.pending_updater_action.lock().await;
+    let action = pending.take();
+    let action_str = match action {
+        Some(UpdaterAction::Check) => Some("check"),
+        Some(UpdaterAction::Install) => Some("install"),
+        None => None,
+    };
+    Ok(Json(serde_json::json!({ "action": action_str })))
+}
+
+async fn update_daemon_updater_status(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(status): Json<crate::updater::UpdateStatus>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !verify_token(&state, &headers) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let mut guard = state.updater_status.write().await;
+    *guard = status;
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+async fn health_check() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION")
+    }))
+}
+
+async fn daemon_info_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let count = state.session_manager.active_count().await;
+    Json(serde_json::json!({
+        "pid": std::process::id(),
+        "version": env!("CARGO_PKG_VERSION"),
+        "activeSessions": count
+    }))
+}
+
+async fn daemon_session_count_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let count = state.session_manager.active_count().await;
+    Json(serde_json::json!({
+        "activeSessions": count
+    }))
+}
+
+async fn daemon_shutdown_handler(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !verify_token(&state, &headers) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let tx = state.shutdown_tx.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let _ = tx.send(());
+    });
+    Ok(Json(serde_json::json!({ "success": true, "message": "Daemon shutting down" })))
+}
+
+async fn activate_session_handler(
+    AxumPath(id): AxumPath<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<SessionInfo>, (StatusCode, Json<serde_json::Value>)> {
+    match state.session_manager.activate(&id).await {
+        Ok(s) => Ok(Json(s.get_info())),
+        Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": err })),
+            Json(serde_json::json!({ "error": e })),
         )),
     }
+}
+
+fn verify_token(state: &AppState, headers: &axum::http::HeaderMap) -> bool {
+    if let Some(token_header) = headers.get("X-Termi-Token") {
+        if let Ok(token_str) = token_header.to_str() {
+            return token_str == state.token;
+        }
+    }
+    false
 }
 
 #[derive(Deserialize)]
@@ -468,9 +557,9 @@ async fn ws_handler(
         }
     };
 
-    let session = match state.session_manager.get(&session_id).await {
-        Some(s) => s,
-        None => {
+    let session = match state.session_manager.activate(&session_id).await {
+        Ok(s) => s,
+        Err(_) => {
             return (StatusCode::NOT_FOUND, "Session not found").into_response();
         }
     };
@@ -603,9 +692,10 @@ async fn static_or_spa_fallback(uri: axum::http::Uri) -> axum::response::Respons
 }
 
 pub async fn start_server(
-    app_handle: tauri::AppHandle,
     session_manager: Arc<SessionManager>,
-) -> Result<(String, u16, tokio::task::JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>> {
+    token: String,
+    shutdown_tx: tokio::sync::broadcast::Sender<()>,
+) -> Result<(String, u16, Arc<AppState>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>> {
     let host = resolve_host();
     let initial_port: u16 = std::env::var("PORT")
         .ok()
@@ -647,11 +737,22 @@ pub async fn start_server(
 
     let state = Arc::new(AppState {
         session_manager,
-        app_handle,
         custom_scripts_manager,
+        updater_status: Arc::new(tokio::sync::RwLock::new(crate::updater::UpdateStatus::Idle)),
+        pending_updater_action: Arc::new(tokio::sync::Mutex::new(None)),
+        token,
+        shutdown_tx: shutdown_tx.clone(),
     });
 
+    let mut shutdown_rx = shutdown_tx.subscribe();
+
     let app = Router::new()
+        .route("/api/health", get(health_check))
+        .route("/api/daemon/info", get(daemon_info_handler))
+        .route("/api/daemon/session-count", get(daemon_session_count_handler))
+        .route("/api/daemon/shutdown", post(daemon_shutdown_handler))
+        .route("/api/daemon/updater-status", post(update_daemon_updater_status))
+        .route("/api/daemon/updater-action", get(get_updater_action))
         .route("/api/sessions", get(list_sessions).post(create_session))
         .route(
             "/api/sessions/{id}",
@@ -659,6 +760,7 @@ pub async fn start_server(
                 .patch(update_session)
                 .delete(delete_session),
         )
+        .route("/api/sessions/{id}/activate", post(activate_session_handler))
         .route("/api/sessions/{id}/upload", post(upload_file))
         .route("/api/default-cwd", get(get_default_cwd))
         .route(
@@ -686,13 +788,19 @@ pub async fn start_server(
         .route("/ws/pty", get(ws_handler))
         .fallback(static_or_spa_fallback)
         .layer(CorsLayer::permissive())
-        .with_state(state);
+        .with_state(state.clone());
 
     let handle = tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
+        let server = axum::serve(listener, app);
+        if let Err(e) = server
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.recv().await;
+            })
+            .await
+        {
             eprintln!("[termi] Server error: {e}");
         }
     });
 
-    Ok((server_url, bound_port, handle))
+    Ok((server_url, bound_port, state, handle))
 }

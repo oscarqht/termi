@@ -1163,7 +1163,12 @@ export default function Terminal() {
                     <span className="dot" />
                     <div className="session-details">
                       {s.title?.trim() ? (
-                        <div className="session-title" title={s.title.trim()}>{s.title.trim()}</div>
+                        <div className="session-title" title={s.title.trim()}>
+                          {s.title.trim()}
+                          {s.dormant && <span style={{ marginLeft: 6, fontSize: '0.75rem', opacity: 0.6 }}>(Restored)</span>}
+                        </div>
+                      ) : s.dormant ? (
+                        <div className="session-title" style={{ fontSize: '0.75rem', opacity: 0.6 }}>(Restored session)</div>
                       ) : null}
                       <div className="session-cwd">
                         <CopyableCode code={s.cwd} />

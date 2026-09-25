@@ -115,8 +115,9 @@ pub fn cmd_open_full_disk_access_settings() {
 
 pub fn setup_tray(
     app: &AppHandle,
-    server_url: String,
+    daemon_info: crate::daemon::DaemonInfo,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let server_url = daemon_info.url.clone();
     let autostart_enabled = app
         .autolaunch()
         .is_enabled()
@@ -222,6 +223,7 @@ pub fn setup_tray(
         .ok()
         .or_else(|| app.default_window_icon().cloned());
 
+    let daemon_info_for_menu = daemon_info.clone();
     let mut builder = TrayIconBuilder::with_id("termi-tray")
         .icon_as_template(false)
         .menu(&menu)
@@ -258,7 +260,42 @@ pub fn setup_tray(
                     });
                 }
                 "quit" => {
-                    app_handle.exit(0);
+                    let handle = app_handle.clone();
+                    let d_info = daemon_info_for_menu.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let active_sessions = crate::daemon::get_daemon_session_count(&d_info).await.unwrap_or(0);
+                        if active_sessions == 0 {
+                            let _ = crate::daemon::stop_daemon(&d_info).await;
+                            handle.exit(0);
+                        } else {
+                            use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+                            let session_plural = if active_sessions == 1 { "session" } else { "sessions" };
+                            let prompt_text = format!(
+                                "You have {active_sessions} active terminal {session_plural} running in the background.\n\n\
+                                Do you want to keep them running in the background, or stop all sessions and quit?"
+                            );
+
+                            handle.dialog()
+                                .message(prompt_text)
+                                .title("Quit Termi")
+                                .kind(MessageDialogKind::Warning)
+                                .buttons(MessageDialogButtons::OkCancelCustom("Keep Running".into(), "Stop All & Quit".into()))
+                                .show(move |res| {
+                                    if res {
+                                        // "Keep Running": quit desktop GUI only, daemon continues running
+                                        handle.exit(0);
+                                    } else {
+                                        // "Stop All & Quit": stop background daemon and sessions, then exit
+                                        let h2 = handle.clone();
+                                        let d2 = d_info.clone();
+                                        tauri::async_runtime::spawn(async move {
+                                            let _ = crate::daemon::stop_daemon(&d2).await;
+                                            h2.exit(0);
+                                        });
+                                    }
+                                });
+                        }
+                    });
                 }
                 _ => {}
             }
