@@ -315,7 +315,13 @@ export default function HeaderUpdater() {
                     <line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
                 </div>
-                <p className="updater-state-title">Update Check Failed</p>
+                <p className="updater-state-title">
+                  {status.data.message?.toLowerCase().includes('install')
+                    ? 'Update Installation Failed'
+                    : status.data.message?.toLowerCase().includes('download')
+                    ? 'Update Download Failed'
+                    : 'Update Check Failed'}
+                </p>
                 <p className="updater-error-box">{status.data.message}</p>
                 <button
                   type="button"

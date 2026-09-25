@@ -122,9 +122,20 @@ pub async fn check_and_download(app: &AppHandle, show_window: bool, force: bool)
         mgr.is_checking_or_downloading = true;
         mgr.status = UpdateStatus::Checking;
     }
-    let _ = app.emit("termi://update-status", UpdateStatus::Checking);
+    if crate::is_dev() {
+        println!("[termi] Development mode active: updater is disabled.");
+        let state = app.state::<UpdateState>();
+        let err_status = UpdateStatus::Error {
+            message: "Updates are disabled in development mode.".to_string(),
+        };
+        let mut mgr = state.0.lock().await;
+        mgr.status = err_status.clone();
+        mgr.is_checking_or_downloading = false;
+        let _ = app.emit("termi://update-status", &err_status);
+        return;
+    }
 
-    let updater = match app.updater() {
+    let updater = match get_updater(app) {
         Ok(u) => u,
         Err(e) => {
             let err_msg = format!("Failed to initialize updater: {e}");
@@ -342,12 +353,71 @@ pub async fn install_and_relaunch_inner(app: &AppHandle) -> Result<(), String> {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(curr_exe) = std::env::current_exe() {
+                let is_bundle = curr_exe.to_string_lossy().contains(".app/Contents/MacOS");
+                if is_bundle {
+                    let bundle_exists = curr_exe
+                        .parent()
+                        .and_then(|p| p.parent())
+                        .and_then(|p| p.parent())
+                        .map(|b| b.exists())
+                        .unwrap_or(false);
+                    if !bundle_exists {
+                        let installed_app = std::path::Path::new("/Applications/Termi.app");
+                        if installed_app.exists() {
+                            println!("[termi] Relaunching /Applications/Termi.app...");
+                            let _ = std::process::Command::new("open")
+                                .arg("-a")
+                                .arg(installed_app)
+                                .spawn();
+                            std::process::exit(0);
+                        }
+                    }
+                }
+            }
+        }
         handle.restart();
     });
     Ok(())
 }
 
+fn get_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    let mut builder = app.updater_builder();
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(curr_exe) = std::env::current_exe() {
+            let is_bundle = curr_exe.to_string_lossy().contains(".app/Contents/MacOS");
+            if is_bundle {
+                let bundle_opt = curr_exe
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent());
+                let bundle_exists = bundle_opt.map(|b| b.exists()).unwrap_or(false);
+                if !bundle_exists {
+                    let installed_app = std::path::PathBuf::from("/Applications/Termi.app/Contents/MacOS/termi");
+                    if installed_app.exists() {
+                        println!("[termi] Current running app bundle was deleted; targeting /Applications/Termi.app for update");
+                        builder = builder.executable_path(installed_app);
+                    } else {
+                        let path_str = bundle_opt.map(|b| b.display().to_string()).unwrap_or_default();
+                        return Err(format!(
+                            "Cannot update: Application bundle at '{path_str}' does not exist on disk. Please reinstall Termi into /Applications."
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    builder.build().map_err(|e| e.to_string())
+}
+
 pub fn start_background_updater(app: AppHandle) {
+    if crate::is_dev() {
+        println!("[termi] Development mode active: background updater disabled.");
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         // Initial check 10 seconds after startup
         tokio::time::sleep(Duration::from_secs(10)).await;
