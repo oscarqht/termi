@@ -838,6 +838,86 @@ button.secondary:hover {
   flex-shrink: 0;
 }
 
+.session-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.session-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.session-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.25rem 0.5rem 0.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.session-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.session-group-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.session-group-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.session-group-path {
+  font-size: 0.775rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.session-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.session-branch-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.session-restored-tag {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
 button.small {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;

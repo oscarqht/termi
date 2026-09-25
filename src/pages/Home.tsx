@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   type CommonCmd,
   DEFAULT_COMMON_CMDS,
@@ -32,16 +32,14 @@ import {
   deleteWorktreeApi,
   normalizeBranchName,
 } from '../gitUtils';
+import {
+  type SessionInfo,
+  groupAndSortSessions,
+  formatRelativeTime,
+  detectSessionGit,
+} from '../sessionUtils';
 
-export type SessionInfo = {
-  id: string;
-  cwd: string;
-  cmd: string;
-  title?: string;
-  createdAt: number;
-  connected: boolean;
-  dormant?: boolean;
-};
+export type { SessionInfo };
 
 const RECENT_CMDS_KEY = 'termi:recentCmds';
 const MAX_RECENT = 10;
@@ -134,6 +132,10 @@ export default function Home() {
 
   const secondaryWorktrees = (gitInfo?.worktrees || []).filter((w) => !w.isMain);
   const normalizedBranchPreview = normalizeBranchName(newBranchInput);
+
+  const sessionGroups = useMemo(() => {
+    return groupAndSortSessions(sessions, defaultCwd);
+  }, [sessions, defaultCwd]);
 
   function addSavedPromptFromHome() {
     const titleTrim = newPromptTitle.trim();
@@ -971,78 +973,136 @@ export default function Home() {
             >
               {sessions.length === 0 && <p className="muted" style={{ margin: '0.25rem 0' }}>No terminals running.</p>}
               {sessions.length > 0 && (
-                <ul className="session-list" style={{ margin: 0 }}>
-                  {sessions.map((s) => (
-                    <li
-                      key={s.id}
-                      className={`session-item ${s.connected ? 'connected' : 'disconnected'}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        const selection = window.getSelection()?.toString();
-                        if (selection && selection.length > 0) return;
-                        if (e.metaKey || e.ctrlKey) {
-                          resumeSession(s.id, s.cwd, true);
-                        } else {
-                          resumeSession(s.id, s.cwd, false);
-                        }
-                      }}
-                      onAuxClick={(e) => {
-                        if (e.button === 1) {
-                          e.preventDefault();
-                          resumeSession(s.id, s.cwd, true);
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          resumeSession(s.id, s.cwd, false);
-                        }
-                      }}
-                      title={
-                        s.title?.trim()
-                          ? `Resume "${s.title.trim()}" (Click to open, ⌘/Ctrl+click for new tab)`
-                          : `Resume session (Click to open, ⌘/Ctrl+click for new tab)`
-                      }
-                    >
-                      <div className="session-info">
-                        <span className="dot" />
-                        <div className="session-details">
-                          {s.title?.trim() ? (
-                            <div className="session-title" title={s.title.trim()}>
-                              {s.title.trim()}
-                              {s.dormant && <span style={{ marginLeft: 6, fontSize: '0.75rem', opacity: 0.6 }}>(Restored)</span>}
-                            </div>
-                          ) : s.dormant ? (
-                            <div className="session-title" style={{ fontSize: '0.75rem', opacity: 0.6 }}>(Restored session)</div>
-                          ) : null}
-                          <div className="session-cwd">
-                            <CopyableCode code={s.cwd} />
-                          </div>
-                          {s.cmd?.trim() ? (
-                            <div className="session-cmd">
-                              <CopyableCode code={s.cmd.trim()} />
-                            </div>
-                          ) : null}
+                <div className="session-groups">
+                  {sessionGroups.map((group) => (
+                    <div key={group.groupKey} className="session-group">
+                      <div className="session-group-header">
+                        <div className="session-group-title" title={group.fullPath}>
+                          {group.isRepo ? (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="session-group-icon">
+                              <circle cx="18" cy="18" r="3" />
+                              <circle cx="6" cy="6" r="3" />
+                              <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+                              <line x1="6" y1="9" x2="6" y2="21" />
+                            </svg>
+                          ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="session-group-icon">
+                              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                            </svg>
+                          )}
+                          <span className="session-group-name">{group.name}</span>
+                          <span className="session-group-path">{group.displayPath}</span>
                         </div>
+                        <Badge variant="default" size="sm">
+                          {group.sessions.length} {group.sessions.length === 1 ? 'session' : 'sessions'}
+                        </Badge>
                       </div>
-                      <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          type="button"
-                          variant="danger"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            closeSession(s.id);
-                          }}
-                          title="Close session"
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </li>
+
+                      <ul className="session-list" style={{ margin: 0 }}>
+                        {group.sessions.map((s) => {
+                          const git = detectSessionGit(s);
+                          const isWorktree = git?.isWorktree || (s.cwd && s.cwd.includes('/.worktrees/'));
+                          const branch = git?.branch || (s.cwd ? s.cwd.match(/[/\\]\.worktrees[/\\]([^/\\]+)/)?.[1] : undefined);
+                          const titleText = s.title?.trim() || (!s.cmd?.trim() ? 'Terminal' : '');
+                          const activeTimeStr = formatRelativeTime(s.lastActiveTime || s.createdAt);
+
+                          return (
+                            <li
+                              key={s.id}
+                              className={`session-item ${s.connected ? 'connected' : 'disconnected'}`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                const selection = window.getSelection()?.toString();
+                                if (selection && selection.length > 0) return;
+                                if (e.metaKey || e.ctrlKey) {
+                                  resumeSession(s.id, s.cwd, true);
+                                } else {
+                                  resumeSession(s.id, s.cwd, false);
+                                }
+                              }}
+                              onAuxClick={(e) => {
+                                if (e.button === 1) {
+                                  e.preventDefault();
+                                  resumeSession(s.id, s.cwd, true);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  resumeSession(s.id, s.cwd, false);
+                                }
+                              }}
+                              title={
+                                s.title?.trim()
+                                  ? `Resume "${s.title.trim()}" (Click to open, ⌘/Ctrl+click for new tab)`
+                                  : `Resume session (Click to open, ⌘/Ctrl+click for new tab)`
+                              }
+                            >
+                              <div className="session-info">
+                                <span className="dot" />
+                                <div className="session-details">
+                                  <div className="session-title-row">
+                                    {isWorktree && branch ? (
+                                      <Badge variant="info" size="sm" className="session-branch-badge" title={`Worktree branch: ${branch}`}>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3, verticalAlign: -1 }}>
+                                          <line x1="6" y1="3" x2="6" y2="15" />
+                                          <circle cx="18" cy="6" r="3" />
+                                          <circle cx="6" cy="18" r="3" />
+                                          <path d="M18 9a9 9 0 0 1-9 9" />
+                                        </svg>
+                                        {branch}
+                                      </Badge>
+                                    ) : null}
+
+                                    {titleText ? (
+                                      <span className="session-title" title={titleText}>
+                                        {titleText}
+                                      </span>
+                                    ) : null}
+
+                                    {s.dormant ? (
+                                      <span className="session-restored-tag">(Restored)</span>
+                                    ) : null}
+
+                                    {activeTimeStr ? (
+                                      <span
+                                        className="session-time"
+                                        title={`Last active: ${new Date(s.lastActiveTime || s.createdAt).toLocaleString()}`}
+                                      >
+                                        {activeTimeStr}
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  {s.cmd?.trim() ? (
+                                    <div className="session-cmd">
+                                      <CopyableCode code={s.cmd.trim()} />
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                  type="button"
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    closeSession(s.id);
+                                  }}
+                                  title="Close session"
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </Card>
           </>

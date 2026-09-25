@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
@@ -11,6 +11,13 @@ use uuid::Uuid;
 
 pub const BUFFER_MAX_CHARS: usize = 1_000_000;
 
+pub fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub id: String,
@@ -19,6 +26,8 @@ pub struct SessionInfo {
     pub title: String,
     #[serde(rename = "createdAt")]
     pub created_at: u64,
+    #[serde(rename = "lastActiveTime", default)]
+    pub last_active_time: u64,
     pub connected: bool,
     #[serde(default)]
     pub dormant: bool,
@@ -130,6 +139,7 @@ pub struct Session {
     pub cmd: String,
     pub title: RwLock<String>,
     pub created_at: u64,
+    pub last_active_time: AtomicU64,
     pub buffer: RwLock<OutputBuffer>,
     pub client_count: AtomicUsize,
     pub exited: AtomicBool,
@@ -142,6 +152,7 @@ pub struct Session {
 
 impl Session {
     pub fn write_input(&self, data: &str) {
+        self.last_active_time.store(now_millis(), Ordering::Relaxed);
         if !self.exited.load(Ordering::Relaxed) && !self.dormant.load(Ordering::Relaxed) {
             if let Ok(tx_guard) = self.writer_tx.read() {
                 if let Some(ref tx) = *tx_guard {
@@ -174,6 +185,7 @@ impl Session {
             cmd: self.cmd.clone(),
             title,
             created_at: self.created_at,
+            last_active_time: self.last_active_time.load(Ordering::Relaxed),
             connected: self.client_count.load(Ordering::Relaxed) > 0,
             dormant: self.dormant.load(Ordering::Relaxed),
         }
@@ -342,6 +354,7 @@ fn spawn_pty(
                             })
                             .to_string();
                             {
+                                session_for_read.last_active_time.store(now_millis(), Ordering::Relaxed);
                                 let mut b = session_for_read.buffer.blocking_write();
                                 b.write(text);
                                 let _ = tx_for_read.send(msg);
@@ -421,6 +434,7 @@ impl SessionManager {
                 cmd: r.cmd.clone(),
                 title: RwLock::new(r.title.clone()),
                 created_at: r.created_at,
+                last_active_time: AtomicU64::new(r.created_at),
                 buffer: RwLock::new(OutputBuffer::new(BUFFER_MAX_CHARS)),
                 client_count: AtomicUsize::new(0),
                 exited: AtomicBool::new(false),
@@ -525,6 +539,7 @@ impl SessionManager {
             cmd: cmd.clone(),
             title: RwLock::new(title.trim().to_string()),
             created_at: now,
+            last_active_time: AtomicU64::new(now),
             buffer: RwLock::new(OutputBuffer::new(BUFFER_MAX_CHARS)),
             client_count: AtomicUsize::new(0),
             exited: AtomicBool::new(false),
@@ -633,6 +648,7 @@ mod tests {
             cmd: "".to_string(),
             title: RwLock::new("Dormant Shell".to_string()),
             created_at: 1700000000,
+            last_active_time: AtomicU64::new(1700000000),
             buffer: RwLock::new(OutputBuffer::new(1000)),
             client_count: AtomicUsize::new(0),
             exited: AtomicBool::new(false),
@@ -672,6 +688,7 @@ mod tests {
             cmd: "".to_string(),
             title: RwLock::new("Persisted Shell".to_string()),
             created_at: 1700000000,
+            last_active_time: AtomicU64::new(1700000000),
             buffer: RwLock::new(OutputBuffer::new(1000)),
             client_count: AtomicUsize::new(0),
             exited: AtomicBool::new(true),

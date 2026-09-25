@@ -511,6 +511,7 @@ async function handleApi(req, res, url) {
     const cmd = typeof body.cmd === 'string' ? body.cmd : '';
     let title = typeof body.title === 'string' ? body.title : '';
     let banner = null;
+    let git = null;
 
     // Handle branching into a new worktree
     if (body.baseBranch && body.newBranch) {
@@ -520,8 +521,14 @@ async function handleApi(req, res, url) {
           baseBranch: String(body.baseBranch).trim(),
           newBranch: String(body.newBranch).trim(),
         });
+        const originalRepoRoot = resolvedCwd;
         resolvedCwd = wtResult.worktreePath;
         title = wtResult.branch;
+        git = {
+          repoRoot: wtResult.repoRoot || originalRepoRoot,
+          branch: wtResult.branch,
+          isWorktree: true,
+        };
         banner =
           `\r\n\x1b[38;2;14;165;233m[termi]\x1b[0m Worktree ready at \x1b[1m.worktrees/${wtResult.branch.replace(/\//g, '-')}\x1b[0m (branch: \x1b[36m${wtResult.branch}\x1b[0m, base: \x1b[35m${wtResult.baseBranch}\x1b[0m)\r\n` +
           (wtResult.remoteSyncWarning ? `\x1b[33m[termi] Warning: ${wtResult.remoteSyncWarning}\x1b[0m\r\n` : '') +
@@ -552,13 +559,18 @@ async function handleApi(req, res, url) {
       const wtInfo = await getGitInfo(resolvedWt);
       const branchName = wtInfo.currentBranch || path.basename(resolvedWt);
       title = branchName;
+      git = {
+        repoRoot: wtInfo.repoRoot || path.resolve(resolvedWt, '../..'),
+        branch: branchName,
+        isWorktree: true,
+      };
       banner =
         `\r\n\x1b[38;2;14;165;233m[termi]\x1b[0m Resumed worktree \x1b[1m${path.basename(resolvedWt)}\x1b[0m (branch: \x1b[36m${branchName}\x1b[0m)\r\n` +
         (syncRes.warning ? `\x1b[33m[termi] ${syncRes.warning}\x1b[0m\r\n` : `\x1b[32m[termi] Up to date with remote (rebase --autostash)\x1b[0m\r\n`) +
         `\r\n`;
     }
 
-    const session = createSession({ cwd: resolvedCwd, cmd, title, banner });
+    const session = createSession({ cwd: resolvedCwd, cmd, title, banner, git });
     await addRecentCwd(resolvedCwd);
     res.setHeader('Content-Type', 'application/json');
     res.end(

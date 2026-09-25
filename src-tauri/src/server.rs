@@ -705,6 +705,7 @@ async fn ws_handler(
 
 async fn handle_ws_socket(socket: WebSocket, session: Arc<Session>) {
     session.client_count.fetch_add(1, Ordering::Relaxed);
+    session.last_active_time.store(crate::session::now_millis(), Ordering::Relaxed);
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
     // Snapshot buffer and subscribe atomically under the read lock to prevent

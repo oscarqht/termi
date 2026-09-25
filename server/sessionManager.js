@@ -54,17 +54,32 @@ function shell() {
 }
 
 export function listSessions() {
-  return [...sessions.values()].map((s) => ({
-    id: s.id,
-    cwd: s.cwd,
-    cmd: s.cmd,
-    title: s.title || '',
-    createdAt: s.createdAt,
-    connected: s.clients.size > 0,
-  }));
+  return [...sessions.values()].map((s) => {
+    let git = s.git || null;
+    if (!git && s.cwd) {
+      const wtMatch = s.cwd.match(/^(.*?)[/\\]\.worktrees[/\\]([^/\\]+)/);
+      if (wtMatch) {
+        git = {
+          repoRoot: wtMatch[1],
+          branch: wtMatch[2],
+          isWorktree: true,
+        };
+      }
+    }
+    return {
+      id: s.id,
+      cwd: s.cwd,
+      cmd: s.cmd,
+      title: s.title || '',
+      createdAt: s.createdAt,
+      lastActiveTime: s.lastActiveTime || s.createdAt,
+      connected: s.clients.size > 0,
+      git,
+    };
+  });
 }
 
-export function createSession({ cwd, cmd, title, banner }) {
+export function createSession({ cwd, cmd, title, banner, git }) {
   const id = crypto.randomUUID();
   const isWin = process.platform === 'win32';
   const termEnv = {
@@ -85,12 +100,15 @@ export function createSession({ cwd, cmd, title, banner }) {
     env: termEnv,
   });
 
+  const now = Date.now();
   const session = {
     id,
     cwd,
     cmd,
     title: typeof title === 'string' ? title.trim() : '',
-    createdAt: Date.now(),
+    createdAt: now,
+    lastActiveTime: now,
+    git: git || null,
     pty: term,
     buffer: new OutputBuffer(BUFFER_MAX_CHARS),
     clients: new Set(),
@@ -107,6 +125,7 @@ export function createSession({ cwd, cmd, title, banner }) {
   });
 
   term.onData((data) => {
+    session.lastActiveTime = Date.now();
     session.buffer.write(data);
     for (const client of session.clients) {
       if (client.readyState === 1 /* OPEN */) {
@@ -153,6 +172,7 @@ export function updateSessionTitle(id, title) {
 }
 
 export function attachClient(session, ws) {
+  session.lastActiveTime = Date.now();
   session.clients.add(ws);
   const data = session.buffer ? session.buffer.toString() : '';
   if (data) {
@@ -181,6 +201,7 @@ export function resizeSession(session, cols, rows) {
 
 export function writeToSession(session, data) {
   if (!session || !session.pty || session.exited) return;
+  session.lastActiveTime = Date.now();
   try {
     session.pty.write(data);
   } catch {
