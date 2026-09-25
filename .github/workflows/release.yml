@@ -22,6 +22,7 @@ jobs:
       tag: ${{ steps.version_step.outputs.tag }}
       version: ${{ steps.version_step.outputs.version }}
       should_release: ${{ steps.version_step.outputs.should_release }}
+      changelog: ${{ steps.changelog_step.outputs.changelog }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -48,6 +49,12 @@ jobs:
             node scripts/bump-version.js
           fi
 
+      - name: Generate Changelog
+        id: changelog_step
+        if: steps.version_step.outputs.should_release == 'true'
+        run: |
+          node scripts/generate-changelog.js "${{ steps.version_step.outputs.tag }}" --out changelog.txt
+
       - name: Create draft release
         if: steps.version_step.outputs.should_release == 'true'
         env:
@@ -55,13 +62,14 @@ jobs:
         run: |
           TAG="${{ steps.version_step.outputs.tag }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Pre-creating draft release for $TAG..."
+            echo "Pre-creating draft release for $TAG with generated changelog..."
             gh release create "$TAG" \
               --draft \
               --title "Termi $TAG" \
-              --notes "See assets below to install Termi."
+              -F changelog.txt
           else
-            echo "Release $TAG already exists."
+            echo "Release $TAG already exists, updating notes..."
+            gh release edit "$TAG" -F changelog.txt
           fi
 
   build:
@@ -123,7 +131,7 @@ jobs:
         with:
           tagName: ${{ needs.prepare.outputs.tag }}
           releaseName: 'Termi ${{ needs.prepare.outputs.tag }}'
-          releaseBody: 'See assets below to install Termi.'
+          releaseBody: ${{ needs.prepare.outputs.changelog || 'See assets below to install Termi.' }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: false
