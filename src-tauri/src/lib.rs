@@ -1,3 +1,4 @@
+pub mod custom_scripts;
 pub mod prompts;
 pub mod recent_cwds;
 pub mod server;

@@ -14,6 +14,7 @@ import {
   subscribeSavedPrompts,
 } from '../savedPrompts';
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
+import { CustomScriptsModal } from '../components/CustomScriptsModal';
 import HeaderUpdater from '../components/HeaderUpdater';
 import { abbreviatePath, formatPathDisplay, isSameCwd } from '../pathUtils';
 import { Card, Button, Badge, Header } from '../components/ui';
@@ -66,6 +67,7 @@ export default function Home() {
   const [recentCmds, setRecentCmds] = useState<string[]>([]);
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>(() => loadSavedPrompts());
   const [savedPromptsModalOpen, setSavedPromptsModalOpen] = useState(false);
+  const [customScriptsModalOpen, setCustomScriptsModalOpen] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
   const [newPromptTitle, setNewPromptTitle] = useState('');
   const [newPromptContent, setNewPromptContent] = useState('');
@@ -350,7 +352,24 @@ export default function Home() {
         title="termi"
         subtitle="Open a browser tab backed by a real local terminal."
         iconSrc="/app-icon.png"
-        actions={<HeaderUpdater />}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setCustomScriptsModalOpen(true)}
+              title="Manage and run custom bash scripts"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+              <span>Custom Scripts</span>
+            </Button>
+            <HeaderUpdater />
+          </>
+        }
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -731,6 +750,12 @@ export default function Home() {
           fetchSavedPrompts().then(setSavedPrompts);
         }}
         initialManageMode={true}
+      />
+
+      <CustomScriptsModal
+        isOpen={customScriptsModalOpen}
+        onClose={() => setCustomScriptsModalOpen(false)}
+        currentCwd={cwd || defaultCwd}
       />
     </main>
   );

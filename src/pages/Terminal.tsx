@@ -6,6 +6,7 @@ import { getCommonCmdExplanationMap } from '../commonCmds';
 import { MobileAccessoryBar } from '../components/MobileAccessoryBar';
 import { TextEditorModal, type TextEditorModalHandle } from '../components/TextEditorModal';
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
+import { CustomScriptsModal } from '../components/CustomScriptsModal';
 import type { SessionInfo } from './Home';
 import { isSameCwd } from '../pathUtils';
 import { uploadSessionFiles, shellQuote } from '../uploadUtils';
@@ -134,6 +135,9 @@ export default function Terminal() {
   const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
   const savedPromptsOpenRef = useRef(savedPromptsOpen);
   savedPromptsOpenRef.current = savedPromptsOpen;
+  const [customScriptsOpen, setCustomScriptsOpen] = useState(false);
+  const customScriptsOpenRef = useRef(customScriptsOpen);
+  customScriptsOpenRef.current = customScriptsOpen;
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
@@ -1323,6 +1327,29 @@ export default function Terminal() {
         {phase === 'connected' && (
           <button
             className="icon-button"
+            onClick={() => setCustomScriptsOpen(true)}
+            title="Custom scripts (Run in this directory)"
+            aria-label="Custom scripts"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </button>
+        )}
+        {phase === 'connected' && (
+          <button
+            className="icon-button"
             onClick={handleOpenSettings}
             title="Session settings"
             aria-label="Session settings"
@@ -1497,7 +1524,12 @@ export default function Terminal() {
         ref={containerRef}
         className={`xterm-container${dragActive ? ' drag-active' : ''}`}
         onClick={() => {
-          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+          if (
+            !editorOpenRef.current &&
+            !savedPromptsOpenRef.current &&
+            !customScriptsOpenRef.current &&
+            !settingsOpenRef.current
+          ) {
             xtermRef.current?.focus();
           }
         }}
@@ -1535,6 +1567,14 @@ export default function Terminal() {
         onSelectPrompt={(promptText) => {
           handleSendEditorText(promptText, false);
         }}
+      />
+      <CustomScriptsModal
+        isOpen={customScriptsOpen}
+        onClose={() => {
+          setCustomScriptsOpen(false);
+          xtermRef.current?.focus();
+        }}
+        currentCwd={cwd}
       />
     </div>
   );
