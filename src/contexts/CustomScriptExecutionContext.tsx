@@ -139,9 +139,7 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
           command: 'start',
           cwd,
           scriptName: script.name,
-          script_name: script.name,
           scriptContent: script.content,
-          script_content: script.content,
         }),
       });
 
@@ -215,7 +213,6 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
           body: JSON.stringify({
             command: 'dismiss',
             executionId: item.id,
-            execution_id: item.id,
           }),
         }).catch(() => {});
       }
@@ -252,9 +249,7 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
             command: 'start',
             cwd: item.cwd,
             scriptName: item.scriptName,
-            script_name: item.scriptName,
             scriptContent,
-            script_content: scriptContent,
           }),
         });
 
@@ -291,7 +286,6 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
             body: JSON.stringify({
               command: 'cancel',
               executionId: result.executionId,
-              execution_id: result.executionId,
               force: true,
             }),
           }).catch(() => {});
@@ -329,7 +323,6 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
         body: JSON.stringify({
           command: 'dismiss',
           executionId,
-          execution_id: executionId,
         }),
       }).catch(() => {});
     }
@@ -368,7 +361,6 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
           body: JSON.stringify({
             command: 'cancel',
             executionId,
-            execution_id: executionId,
             force: !!force,
           }),
         });
@@ -461,7 +453,6 @@ export function CustomScriptExecutionProvider({ children }: { children: React.Re
               body: JSON.stringify({
                 command: 'status',
                 executionId: exec.id,
-                execution_id: exec.id,
               }),
             });
             if (disposed) return;
