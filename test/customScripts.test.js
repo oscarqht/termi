@@ -5,12 +5,19 @@ import {
   DEFAULT_CUSTOM_SCRIPTS,
   loadCustomScripts,
   saveCustomScripts,
+  getCustomScriptsFilePath,
   startExecution,
   getExecution,
   listExecutions,
   cancelExecution,
   dismissExecution,
 } from '../server/customScriptsManager.js';
+import {
+  DEFAULT_CUSTOM_SCRIPTS as CLIENT_DEFAULT_SCRIPTS,
+  parseCustomScripts,
+} from '../src/customScripts.ts';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 
 test('customScriptsManager: DEFAULT_CUSTOM_SCRIPTS contains expected entries', () => {
   assert.ok(Array.isArray(DEFAULT_CUSTOM_SCRIPTS));
@@ -18,6 +25,64 @@ test('customScriptsManager: DEFAULT_CUSTOM_SCRIPTS contains expected entries', (
   const gitScript = DEFAULT_CUSTOM_SCRIPTS.find((s) => s.id === 'script-git-status-log');
   assert.ok(gitScript);
   assert.equal(gitScript.name, 'Git Status & Recent Commits');
+});
+
+test('parseCustomScripts returns defaults when raw is empty or null', () => {
+  assert.equal(parseCustomScripts(null).length, CLIENT_DEFAULT_SCRIPTS.length);
+  assert.equal(parseCustomScripts('').length, CLIENT_DEFAULT_SCRIPTS.length);
+  assert.equal(parseCustomScripts(undefined).length, CLIENT_DEFAULT_SCRIPTS.length);
+});
+
+test('parseCustomScripts preserves empty array when user deletes all scripts', () => {
+  const resultFromString = parseCustomScripts('[]');
+  assert.equal(resultFromString.length, 0);
+  assert.deepEqual(resultFromString, []);
+
+  const resultFromArray = parseCustomScripts([]);
+  assert.equal(resultFromArray.length, 0);
+  assert.deepEqual(resultFromArray, []);
+});
+
+test('customScriptsManager: file persistence and empty array preservation', async (t) => {
+  const filePath = getCustomScriptsFilePath();
+  let backupContent = null;
+  const existed = fs.existsSync(filePath);
+
+  if (existed) {
+    backupContent = await fsp.readFile(filePath, 'utf8');
+  }
+
+  t.after(async () => {
+    if (existed && backupContent !== null) {
+      await fsp.writeFile(filePath, backupContent, 'utf8');
+    }
+  });
+
+  // 1. Save empty array (simulates user deleting all scripts)
+  await saveCustomScripts([]);
+  const afterEmpty = await loadCustomScripts();
+  assert.equal(afterEmpty.length, 0, 'Should return empty array when all scripts were removed');
+
+  // 2. Save custom scripts
+  const customList = [
+    { id: 's1', name: 'Script 1', content: 'echo 1' },
+    { id: 's2', name: 'Script 2', content: 'echo 2' },
+  ];
+  await saveCustomScripts(customList);
+  const afterCustom = await loadCustomScripts();
+  assert.equal(afterCustom.length, 2);
+  assert.equal(afterCustom[0].name, 'Script 1');
+  assert.equal(afterCustom[1].content, 'echo 2');
+
+  // 3. Clear all again and verify it stays empty
+  await saveCustomScripts([]);
+  const afterClearAgain = await loadCustomScripts();
+  assert.equal(afterClearAgain.length, 0, 'Should stay empty on subsequent load');
+
+  // 4. Save defaults (simulates Reset to defaults)
+  await saveCustomScripts(DEFAULT_CUSTOM_SCRIPTS);
+  const afterReset = await loadCustomScripts();
+  assert.equal(afterReset.length, DEFAULT_CUSTOM_SCRIPTS.length);
 });
 
 test('customScriptsManager: load and save custom scripts', async () => {

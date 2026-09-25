@@ -105,15 +105,14 @@ export function parseCustomScripts(raw: unknown): CustomScript[] {
   try {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!Array.isArray(parsed)) return DEFAULT_CUSTOM_SCRIPTS;
-    const items = parsed
+    return parsed
       .map((item, idx) => ({
         id: typeof item?.id === 'string' && item.id.trim() ? item.id.trim() : `script-${idx}`,
         name: typeof item?.name === 'string' ? item.name.trim() : '',
         content: typeof item?.content === 'string' ? item.content : '',
-        description: typeof item?.description === 'string' ? item.description.trim() : undefined,
+        description: typeof item?.description === 'string' && item.description.trim() ? item.description.trim() : undefined,
       }))
       .filter((s) => s.name.length > 0 || s.content.trim().length > 0);
-    return items.length > 0 ? items : DEFAULT_CUSTOM_SCRIPTS;
   } catch {
     return DEFAULT_CUSTOM_SCRIPTS;
   }

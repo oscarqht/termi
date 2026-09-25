@@ -218,7 +218,22 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
             <div className="custom-scripts-list">
               {filteredScripts.length === 0 ? (
                 <div className="empty-state">
-                  No scripts match your search. Switch to the <strong>Manage & Create</strong> tab to add one!
+                  {scripts.length === 0 ? (
+                    <>
+                      No custom scripts yet. Switch to the{' '}
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => setActiveTab('manage')}
+                        style={{ color: 'var(--link-color)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                      >
+                        Manage & Create
+                      </button>{' '}
+                      tab to add one or reset defaults!
+                    </>
+                  ) : (
+                    <>No scripts match your search. Switch to the <strong>Manage & Create</strong> tab to add one!</>
+                  )}
                 </div>
               ) : (
                 filteredScripts.map((script) => (
@@ -328,7 +343,13 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
                   </button>
                 </div>
 
-                {filteredScripts.map((script) => {
+                {filteredScripts.length === 0 ? (
+                  <p className="muted" style={{ padding: '8px 0', fontSize: '0.84rem' }}>
+                    {scripts.length === 0
+                      ? 'No custom scripts yet. Add one above or click Reset Defaults.'
+                      : 'No scripts match your search.'}
+                  </p>
+                ) : filteredScripts.map((script) => {
                   const isEditing = editingId === script.id;
 
                   if (isEditing) {

@@ -124,8 +124,11 @@ pub async fn load_custom_scripts() -> Vec<CustomScript> {
     };
 
     match serde_json::from_str::<Vec<CustomScript>>(&content) {
-        Ok(scripts) if !scripts.is_empty() => scripts,
-        _ => default_custom_scripts(),
+        Ok(scripts) => scripts,
+        Err(e) => {
+            eprintln!("[termi] Failed to parse custom scripts JSON: {e}");
+            default_custom_scripts()
+        }
     }
 }
 

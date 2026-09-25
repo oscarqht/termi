@@ -96,12 +96,12 @@ export async function loadCustomScripts() {
     }
     const raw = await fsp.readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       return parsed.map((item, idx) => ({
         id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `script-${idx}`,
         name: typeof item.name === 'string' ? item.name.trim() : '',
         content: typeof item.content === 'string' ? item.content : '',
-        description: typeof item.description === 'string' ? item.description.trim() : undefined,
+        description: typeof item.description === 'string' && item.description.trim() ? item.description.trim() : undefined,
       }));
     }
     return DEFAULT_CUSTOM_SCRIPTS;

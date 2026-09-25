@@ -150,7 +150,24 @@ describe('Custom Scripts HTTP API routes', () => {
     assert.strictEqual(res.status, 200);
     const body = await res.json();
     assert(Array.isArray(body));
-    assert(body.length > 0);
+  });
+
+  test('PUT /api/custom-scripts/config with [] preserves empty scripts and does not auto-reset', async () => {
+    // 1. Put empty array
+    const putRes = await fetch(`${baseUrl}/api/custom-scripts/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([]),
+    });
+    assert.strictEqual(putRes.status, 200);
+    const putBody = await putRes.json();
+    assert.deepStrictEqual(putBody, []);
+
+    // 2. Subsequent GET should still return []
+    const getRes = await fetch(`${baseUrl}/api/custom-scripts/config`);
+    assert.strictEqual(getRes.status, 200);
+    const getBody = await getRes.json();
+    assert.deepStrictEqual(getBody, []);
   });
 
   test('POST /api/custom-scripts command:start executes script and streams status', async () => {
