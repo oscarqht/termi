@@ -1,6 +1,9 @@
 import Home from './pages/Home';
 import Terminal from './pages/Terminal';
 import Updater from './pages/Updater';
+import { CustomScriptExecutionProvider } from './contexts/CustomScriptExecutionContext';
+import { ScriptModal } from './components/ScriptModal';
+import { ScriptDock } from './components/ScriptDock';
 
 export default function App() {
   const path = window.location.pathname;
@@ -10,6 +13,14 @@ export default function App() {
   if (path === '/updater' || hash === '#updater' || search.includes('page=updater')) {
     return <Updater />;
   }
-  if (path === '/term') return <Terminal />;
-  return <Home />;
+
+  const content = path === '/term' ? <Terminal /> : <Home />;
+
+  return (
+    <CustomScriptExecutionProvider>
+      {content}
+      <ScriptModal />
+      <ScriptDock />
+    </CustomScriptExecutionProvider>
+  );
 }

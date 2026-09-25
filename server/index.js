@@ -32,6 +32,15 @@ import {
   loadSavedPrompts,
   saveSavedPrompts,
 } from './promptsManager.js';
+import {
+  loadCustomScripts,
+  saveCustomScripts,
+  listExecutions,
+  getExecution,
+  startExecution,
+  cancelExecution,
+  dismissExecution,
+} from './customScriptsManager.js';
 
 
 // Cap a single uploaded file at 100MB.
@@ -248,6 +257,120 @@ async function handleApi(req, res, url) {
     const saved = await saveSavedPrompts(body);
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(saved));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/custom-scripts/config') {
+    const scripts = await loadCustomScripts();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(scripts));
+    return true;
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/custom-scripts/config') {
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return true;
+    }
+    if (!Array.isArray(body)) {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Payload must be an array of custom scripts' }));
+      return true;
+    }
+    const saved = await saveCustomScripts(body);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(saved));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/custom-scripts') {
+    const executions = listExecutions();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: true, executions }));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/custom-scripts') {
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.statusCode = 400;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return true;
+    }
+
+    const command = body.command;
+
+    if (command === 'list') {
+      const executions = listExecutions();
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, executions }));
+      return true;
+    }
+
+    const executionId = body.executionId || body.execution_id;
+
+    if (command === 'status') {
+      const execution = getExecution(executionId);
+      if (!execution) {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Execution not found' }));
+        return true;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, ...execution }));
+      return true;
+    }
+
+    if (command === 'cancel') {
+      const execution = cancelExecution(executionId, !!body.force);
+      if (!execution) {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Execution not found' }));
+        return true;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, ...execution }));
+      return true;
+    }
+
+    if (command === 'dismiss') {
+      dismissExecution(executionId);
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true }));
+      return true;
+    }
+
+    if (command === 'start') {
+      try {
+        const execution = startExecution({
+          cwd: body.cwd,
+          scriptName: body.scriptName || body.script_name,
+          scriptContent: body.scriptContent || body.script_content,
+        });
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: true, ...execution }));
+      } catch (err) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return true;
+    }
+
+    res.statusCode = 400;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: `Unknown command: ${command}` }));
     return true;
   }
 

@@ -24,6 +24,7 @@ struct Assets;
 pub struct AppState {
     pub session_manager: Arc<SessionManager>,
     pub app_handle: tauri::AppHandle,
+    pub custom_scripts_manager: Arc<crate::custom_scripts::CustomScriptManager>,
 }
 
 pub fn resolve_host() -> String {
@@ -251,6 +252,128 @@ async fn save_saved_prompts_handler(
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": format!("Failed to save prompts: {e}") })),
         )),
+    }
+}
+
+async fn get_custom_scripts_config_handler() -> Json<Vec<crate::custom_scripts::CustomScript>> {
+    Json(crate::custom_scripts::load_custom_scripts().await)
+}
+
+async fn save_custom_scripts_config_handler(
+    Json(body): Json<Vec<crate::custom_scripts::CustomScript>>,
+) -> Result<Json<Vec<crate::custom_scripts::CustomScript>>, (StatusCode, Json<serde_json::Value>)> {
+    match crate::custom_scripts::save_custom_scripts(&body).await {
+        Ok(_) => Ok(Json(body)),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": format!("Failed to save custom scripts: {e}") })),
+        )),
+    }
+}
+
+async fn list_custom_scripts_handler(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    let executions = state.custom_scripts_manager.list().await;
+    Json(serde_json::json!({ "success": true, "executions": executions }))
+}
+
+async fn handle_custom_scripts_command(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<crate::custom_scripts::CustomScriptPayload>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match payload.command.as_str() {
+        "list" => {
+            let executions = state.custom_scripts_manager.list().await;
+            (StatusCode::OK, Json(serde_json::json!({ "success": true, "executions": executions })))
+        }
+        "status" => {
+            let id = payload.execution_id.unwrap_or_default();
+            if let Some(res) = state.custom_scripts_manager.get(&id).await {
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "executionId": res.execution_id,
+                        "cwd": res.cwd,
+                        "scriptName": res.script_name,
+                        "scriptContent": res.script_content,
+                        "status": res.status,
+                        "cancelRequested": res.cancel_requested,
+                        "output": res.output,
+                        "exitCode": res.exit_code,
+                        "signal": res.signal,
+                        "startedAt": res.started_at,
+                        "finishedAt": res.finished_at,
+                    })),
+                )
+            } else {
+                (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Execution not found" })))
+            }
+        }
+        "cancel" => {
+            let id = payload.execution_id.unwrap_or_default();
+            let force = payload.force.unwrap_or(false);
+            if let Some(res) = state.custom_scripts_manager.cancel(&id, force).await {
+                (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "executionId": res.execution_id,
+                        "cwd": res.cwd,
+                        "scriptName": res.script_name,
+                        "scriptContent": res.script_content,
+                        "status": res.status,
+                        "cancelRequested": res.cancel_requested,
+                        "output": res.output,
+                        "exitCode": res.exit_code,
+                        "signal": res.signal,
+                        "startedAt": res.started_at,
+                        "finishedAt": res.finished_at,
+                    })),
+                )
+            } else {
+                (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Execution not found" })))
+            }
+        }
+        "dismiss" => {
+            let id = payload.execution_id.unwrap_or_default();
+            state.custom_scripts_manager.dismiss(&id).await;
+            (StatusCode::OK, Json(serde_json::json!({ "success": true })))
+        }
+        "start" => {
+            let cwd = payload.cwd.unwrap_or_else(default_cwd);
+            let script_name = payload.script_name.unwrap_or_else(|| "Custom Script".to_string());
+            let script_content = payload.script_content.unwrap_or_default();
+
+            match state.custom_scripts_manager.start(cwd, script_name, script_content).await {
+                Ok(res) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "success": true,
+                        "executionId": res.execution_id,
+                        "cwd": res.cwd,
+                        "scriptName": res.script_name,
+                        "scriptContent": res.script_content,
+                        "status": res.status,
+                        "cancelRequested": res.cancel_requested,
+                        "output": res.output,
+                        "exitCode": res.exit_code,
+                        "signal": res.signal,
+                        "startedAt": res.started_at,
+                        "finishedAt": res.finished_at,
+                    })),
+                ),
+                Err(err) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": err })),
+                ),
+            }
+        }
+        other => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": format!("Unknown command: {other}") })),
+        ),
     }
 }
 
@@ -520,9 +643,12 @@ pub async fn start_server(
     let server_url = format!("http://{host}:{bound_port}");
     println!("[termi] Server listening on {server_url}");
 
+    let custom_scripts_manager = Arc::new(crate::custom_scripts::CustomScriptManager::new());
+
     let state = Arc::new(AppState {
         session_manager,
         app_handle,
+        custom_scripts_manager,
     });
 
     let app = Router::new()
@@ -545,6 +671,14 @@ pub async fn start_server(
         .route(
             "/api/prompts",
             get(get_saved_prompts_handler).put(save_saved_prompts_handler),
+        )
+        .route(
+            "/api/custom-scripts/config",
+            get(get_custom_scripts_config_handler).put(save_custom_scripts_config_handler),
+        )
+        .route(
+            "/api/custom-scripts",
+            get(list_custom_scripts_handler).post(handle_custom_scripts_command),
         )
         .route("/api/updater/status", get(get_updater_status))
         .route("/api/updater/check", post(check_updater))
