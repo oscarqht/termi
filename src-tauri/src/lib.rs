@@ -11,6 +11,28 @@ use std::sync::Arc;
 use session::SessionManager;
 use tauri::Manager;
 
+pub fn is_dev() -> bool {
+    if let Ok(val) = std::env::var("TERMI_ENV") {
+        let v = val.trim().to_lowercase();
+        if v == "production" || v == "prod" {
+            return false;
+        }
+        if v == "development" || v == "dev" {
+            return true;
+        }
+    }
+    if let Ok(val) = std::env::var("NODE_ENV") {
+        let v = val.trim().to_lowercase();
+        if v == "production" || v == "prod" {
+            return false;
+        }
+        if v == "development" || v == "dev" {
+            return true;
+        }
+    }
+    cfg!(debug_assertions) || std::env::var("TERMI_DEV").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false)
+}
+
 pub fn run_daemon() {
     let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -248,7 +270,40 @@ pub fn run() {
                     api.prevent_exit();
                 }
             }
+            tauri::RunEvent::Exit => {
+                if is_dev() {
+                    daemon::remove_daemon_file();
+                }
+            }
             _ => {}
         }
     });
+}
+
+#[cfg(test)]
+pub static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_dev_env_overrides() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("TERMI_ENV", "production");
+        assert!(!is_dev());
+
+        std::env::set_var("TERMI_ENV", "development");
+        assert!(is_dev());
+
+        std::env::remove_var("TERMI_ENV");
+
+        std::env::set_var("NODE_ENV", "production");
+        assert!(!is_dev());
+
+        std::env::set_var("NODE_ENV", "development");
+        assert!(is_dev());
+
+        std::env::remove_var("NODE_ENV");
+    }
 }

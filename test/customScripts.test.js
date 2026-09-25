@@ -18,6 +18,10 @@ import {
 } from '../src/customScripts.ts';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import path from 'node:path';
+
+const tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'termi-unit-test-'));
+process.env.TERMI_CONFIG_DIR = tempConfigDir;
 
 test('customScriptsManager: DEFAULT_CUSTOM_SCRIPTS contains expected entries', () => {
   assert.ok(Array.isArray(DEFAULT_CUSTOM_SCRIPTS));
@@ -160,3 +164,27 @@ test('customScriptsManager: cancel running script', async () => {
 
   dismissExecution(execItem.executionId);
 });
+
+test('customScriptsManager: backup creation and automatic recovery on file loss', async () => {
+  const filePath = getCustomScriptsFilePath();
+  const bakPath = filePath + '.bak';
+
+  const testList = [
+    { id: 'persist-1', name: 'Persist 1', content: 'echo "p1"' },
+  ];
+  await saveCustomScripts(testList);
+
+  assert.ok(fs.existsSync(filePath), 'custom_scripts.json should exist');
+  assert.ok(fs.existsSync(bakPath), 'custom_scripts.json.bak should exist');
+
+  // Simulate accidental file removal or corruption
+  await fsp.unlink(filePath);
+  assert.ok(!fs.existsSync(filePath));
+
+  // Loading should recover from backup
+  const recovered = await loadCustomScripts();
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].name, 'Persist 1');
+  assert.ok(fs.existsSync(filePath), 'custom_scripts.json should be restored from backup');
+});
+

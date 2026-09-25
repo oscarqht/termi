@@ -1818,6 +1818,9 @@ export default function Terminal() {
           xtermRef.current?.focus();
         }}
         currentCwd={cwd}
+        onSendToTerminal={(text, execute) => {
+          handleSendEditorText(text, execute);
+        }}
       />
     </div>
   );

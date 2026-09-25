@@ -82,8 +82,8 @@ function resolveHost() {
 }
 
 const HOST = resolveHost();
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3200;
 const isProd = process.env.NODE_ENV === 'production';
+const PORT = process.env.PORT ? Number(process.env.PORT) : (isProd ? 3200 : 3201);
 
 const PING_INTERVAL_MS = 15_000;
 const PONG_TIMEOUT_MS = 10_000;
@@ -506,7 +506,8 @@ async function handleApi(req, res, url) {
 export async function startServer(options = {}) {
   const isProd = options.isProd !== undefined ? options.isProd : (process.env.NODE_ENV === 'production');
   const host = options.host || resolveHost();
-  const initialPort = options.port || (process.env.PORT ? Number(process.env.PORT) : 3200);
+  const defaultPort = isProd ? 3200 : 3201;
+  const initialPort = options.port || (process.env.PORT ? Number(process.env.PORT) : defaultPort);
   const autoPort = options.autoPort !== false;
   if (options.chooseFolderHandler) {
     customFolderPicker = options.chooseFolderHandler;

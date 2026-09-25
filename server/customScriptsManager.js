@@ -80,6 +80,9 @@ done
 ];
 
 export function getCustomScriptsFilePath() {
+  if (process.env.TERMI_CONFIG_DIR && process.env.TERMI_CONFIG_DIR.trim()) {
+    return path.join(process.env.TERMI_CONFIG_DIR.trim(), 'custom_scripts.json');
+  }
   if (process.platform === 'win32' && process.env.APPDATA) {
     return path.join(process.env.APPDATA, 'termi', 'custom_scripts.json');
   }
@@ -87,16 +90,37 @@ export function getCustomScriptsFilePath() {
   return path.join(home, '.config', 'termi', 'custom_scripts.json');
 }
 
+export function getCustomScriptsBackupFilePath() {
+  const filePath = getCustomScriptsFilePath();
+  return filePath + '.bak';
+}
+
 export async function loadCustomScripts() {
   const filePath = getCustomScriptsFilePath();
+  const bakPath = getCustomScriptsBackupFilePath();
   try {
     if (!fs.existsSync(filePath)) {
+      if (fs.existsSync(bakPath)) {
+        try {
+          const bakRaw = await fsp.readFile(bakPath, 'utf8');
+          const bakParsed = JSON.parse(bakRaw);
+          if (Array.isArray(bakParsed) && bakParsed.length > 0) {
+            await fsp.copyFile(bakPath, filePath);
+            return bakParsed;
+          }
+        } catch {}
+      }
       await saveCustomScripts(DEFAULT_CUSTOM_SCRIPTS);
       return DEFAULT_CUSTOM_SCRIPTS;
     }
     const raw = await fsp.readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
+      if (parsed.length > 0) {
+        try {
+          await fsp.copyFile(filePath, bakPath);
+        } catch {}
+      }
       return parsed.map((item, idx) => ({
         id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `script-${idx}`,
         name: typeof item.name === 'string' ? item.name.trim() : '',
@@ -107,6 +131,16 @@ export async function loadCustomScripts() {
     return DEFAULT_CUSTOM_SCRIPTS;
   } catch (err) {
     console.warn('[termi] Error reading custom scripts file:', err.message);
+    if (fs.existsSync(bakPath)) {
+      try {
+        const bakRaw = await fsp.readFile(bakPath, 'utf8');
+        const bakParsed = JSON.parse(bakRaw);
+        if (Array.isArray(bakParsed)) {
+          console.info('[termi] Recovered custom scripts from backup file');
+          return bakParsed;
+        }
+      } catch {}
+    }
     return DEFAULT_CUSTOM_SCRIPTS;
   }
 }
@@ -126,7 +160,24 @@ export async function saveCustomScripts(scripts) {
   const json = JSON.stringify(valid, null, 2);
   const tempPath = path.join(dir, `custom_scripts.tmp.${crypto.randomUUID()}`);
   await fsp.writeFile(tempPath, json, 'utf8');
+
+  const bakPath = getCustomScriptsBackupFilePath();
+  try {
+    if (fs.existsSync(filePath)) {
+      await fsp.copyFile(filePath, bakPath);
+    }
+  } catch (err) {
+    console.warn('[termi] Failed to backup custom scripts:', err.message);
+  }
+
   await fsp.rename(tempPath, filePath);
+
+  if (valid.length > 0) {
+    try {
+      await fsp.copyFile(filePath, bakPath);
+    } catch {}
+  }
+
   return valid;
 }
 

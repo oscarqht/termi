@@ -11,12 +11,20 @@ import {
   listExecutions,
 } from '../server/customScriptsManager.js';
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 describe('Custom Scripts HTTP API routes', () => {
   let server;
   let port;
   let baseUrl;
+  let tempConfigDir;
 
   before(async () => {
+    tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'termi-api-test-'));
+    process.env.TERMI_CONFIG_DIR = tempConfigDir;
+
     server = http.createServer(async (req, res) => {
       const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -274,5 +282,17 @@ describe('Custom Scripts HTTP API routes', () => {
       }),
     });
     assert.strictEqual(dismissRes.status, 200);
+  });
+
+  after(async () => {
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    if (tempConfigDir) {
+      try {
+        fs.rmSync(tempConfigDir, { recursive: true, force: true });
+      } catch {}
+      delete process.env.TERMI_CONFIG_DIR;
+    }
   });
 });

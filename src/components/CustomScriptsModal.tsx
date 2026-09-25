@@ -15,19 +15,41 @@ interface CustomScriptsModalProps {
   onClose: () => void;
   currentCwd: string;
   initialManageMode?: boolean;
+  onSendToTerminal?: (text: string, execute: boolean) => void;
 }
+
+const QUICK_NAME_DRAFT_KEY = 'termi:quick_script_name_draft';
+const QUICK_CONTENT_DRAFT_KEY = 'termi:quick_script_content_draft';
 
 export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
   isOpen,
   onClose,
   currentCwd,
   initialManageMode = false,
+  onSendToTerminal,
 }) => {
   const { startScript } = useCustomScriptExecution();
 
   const [scripts, setScripts] = useState<CustomScript[]>([]);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'run' | 'manage'>('run');
+  const [activeTab, setActiveTab] = useState<'run' | 'quick' | 'manage'>('run');
+
+  // Quick Run arbitrary script state
+  const [quickName, setQuickName] = useState(() => {
+    try {
+      return sessionStorage.getItem(QUICK_NAME_DRAFT_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [quickContent, setQuickContent] = useState(() => {
+    try {
+      return sessionStorage.getItem(QUICK_CONTENT_DRAFT_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [quickSaveFeedback, setQuickSaveFeedback] = useState(false);
 
   // Edit states
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,6 +63,14 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
   const [newContent, setNewContent] = useState('');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const quickTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(QUICK_NAME_DRAFT_KEY, quickName);
+      sessionStorage.setItem(QUICK_CONTENT_DRAFT_KEY, quickContent);
+    } catch {}
+  }, [quickName, quickContent]);
 
   useEffect(() => {
     if (isOpen) {
@@ -52,9 +82,12 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
       setNewName('');
       setNewDescription('');
       setNewContent('');
+      setQuickSaveFeedback(false);
 
       requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
+        if (!initialManageMode) {
+          searchInputRef.current?.focus();
+        }
       });
     }
   }, [isOpen, initialManageMode]);
@@ -146,6 +179,72 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
     }
   };
 
+  const handleQuickTabClick = () => {
+    setActiveTab('quick');
+    requestAnimationFrame(() => {
+      quickTextareaRef.current?.focus();
+    });
+  };
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const el = e.currentTarget;
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const val = el.value;
+      const next = val.substring(0, start) + '  ' + val.substring(end);
+      setQuickContent(next);
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = start + 2;
+      });
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleRunQuickBackground();
+    }
+  };
+
+  const handleRunQuickBackground = async () => {
+    if (!quickContent.trim()) return;
+    const name = quickName.trim() || 'Quick Script';
+    await startScript({
+      cwd: currentCwd,
+      script: {
+        id: `quick-${Date.now()}`,
+        name,
+        content: quickContent,
+      },
+    });
+    onClose();
+  };
+
+  const handleRunInTerminal = () => {
+    if (!quickContent.trim() || !onSendToTerminal) return;
+    onSendToTerminal(quickContent, true);
+    onClose();
+  };
+
+  const handlePasteToTerminal = () => {
+    if (!quickContent.trim() || !onSendToTerminal) return;
+    onSendToTerminal(quickContent, false);
+    onClose();
+  };
+
+  const handleSaveQuickAsCustomScript = async () => {
+    if (!quickContent.trim()) return;
+    const name = quickName.trim() || 'Quick Script';
+    const newScript: CustomScript = {
+      id: `script-${Date.now()}`,
+      name,
+      content: quickContent,
+    };
+    const updated = [newScript, ...scripts];
+    const saved = await saveCustomScripts(updated);
+    setScripts(saved);
+    setQuickSaveFeedback(true);
+    setTimeout(() => setQuickSaveFeedback(false), 2500);
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="custom-scripts-modal-dialog" onClick={(e) => e.stopPropagation()}>
@@ -178,8 +277,15 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
               className={`custom-scripts-tab ${activeTab === 'run' ? 'active' : ''}`}
               onClick={() => setActiveTab('run')}
             >
-              <span>Run Scripts</span>
+              <span>Saved Scripts</span>
               <Badge variant="default">{scripts.length}</Badge>
+            </button>
+            <button
+              type="button"
+              className={`custom-scripts-tab ${activeTab === 'quick' ? 'active' : ''}`}
+              onClick={handleQuickTabClick}
+            >
+              <span>Quick Run</span>
             </button>
             <button
               type="button"
@@ -190,28 +296,30 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
             </button>
           </div>
 
-          <div className="custom-scripts-search">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search scripts..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <button
-                type="button"
-                className="clear-search-btn"
-                onClick={() => setSearch('')}
-              >
-                ×
-              </button>
-            )}
-          </div>
+          {activeTab === 'run' && (
+            <div className="custom-scripts-search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search scripts..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="clear-search-btn"
+                  onClick={() => setSearch('')}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Content Body */}
@@ -278,6 +386,127 @@ export const CustomScriptsModal: React.FC<CustomScriptsModalProps> = ({
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {activeTab === 'quick' && (
+            <div className="custom-scripts-quick-box">
+              <div className="custom-scripts-quick-header">
+                <div>
+                  <h3 className="custom-scripts-subheading">Type & Run Arbitrary Script</h3>
+                  <p className="custom-scripts-quick-desc">
+                    Type or paste any shell script to run immediately in <code>{currentCwd}</code>. You can run it via the background runner (with live output) or send it directly to your terminal session.
+                  </p>
+                </div>
+              </div>
+
+              <div className="custom-script-form">
+                <div className="form-group">
+                  <label htmlFor="quick-script-name">Script Name (Optional)</label>
+                  <input
+                    id="quick-script-name"
+                    type="text"
+                    placeholder="e.g. Quick build check (defaults to 'Quick Script')"
+                    value={quickName}
+                    onChange={(e) => setQuickName(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <div className="custom-scripts-textarea-header">
+                    <label htmlFor="quick-script-content">Script Content</label>
+                    <span className="custom-scripts-hint">Supports Tab indentation &amp; ⌘Enter / Ctrl+Enter</span>
+                  </div>
+                  <textarea
+                    id="quick-script-content"
+                    ref={quickTextareaRef}
+                    placeholder={'#!/usr/bin/env bash\necho "Current directory: $(pwd)"\n# Type or paste arbitrary script commands here...'}
+                    rows={10}
+                    value={quickContent}
+                    onChange={(e) => setQuickContent(e.target.value)}
+                    onKeyDown={handleTextareaKeyDown}
+                    className="script-textarea quick-script-textarea"
+                    required
+                  />
+                </div>
+
+                <div className="custom-scripts-quick-actions">
+                  <div className="custom-scripts-quick-actions-left">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleRunQuickBackground}
+                      disabled={!quickContent.trim()}
+                      title="Run with background runner (streams live output to Script Dock/Modal)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                      <span>Run in Background</span>
+                    </Button>
+
+                    {onSendToTerminal && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleRunInTerminal}
+                          disabled={!quickContent.trim()}
+                          title="Execute directly in active terminal shell"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="4 17 10 11 4 5" />
+                            <line x1="12" y1="19" x2="20" y2="19" />
+                          </svg>
+                          <span>Run in Terminal</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handlePasteToTerminal}
+                          disabled={!quickContent.trim()}
+                          title="Paste into active terminal shell without pressing Enter"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                          </svg>
+                          <span>Paste to Terminal</span>
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="custom-scripts-quick-actions-right">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleSaveQuickAsCustomScript}
+                      disabled={!quickContent.trim()}
+                      title="Save this script into your permanent custom scripts library"
+                    >
+                      {quickSaveFeedback ? (
+                        <>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span style={{ color: '#10b981' }}>Saved!</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                            <polyline points="17 21 17 13 7 13 7 21" />
+                            <polyline points="7 3 7 8 15 8" />
+                          </svg>
+                          <span>Save as Custom Script</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

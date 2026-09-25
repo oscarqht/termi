@@ -24,11 +24,23 @@ pub fn get_daemon_dir() -> Option<PathBuf> {
 }
 
 pub fn get_daemon_file_path() -> Option<PathBuf> {
-    get_daemon_dir().map(|d| d.join("daemon.json"))
+    get_daemon_dir().map(|d| {
+        if crate::is_dev() {
+            d.join("daemon-dev.json")
+        } else {
+            d.join("daemon.json")
+        }
+    })
 }
 
 pub fn get_daemon_log_path() -> Option<PathBuf> {
-    get_daemon_dir().map(|d| d.join("daemon.log"))
+    get_daemon_dir().map(|d| {
+        if crate::is_dev() {
+            d.join("daemon-dev.log")
+        } else {
+            d.join("daemon.log")
+        }
+    })
 }
 
 pub fn is_process_alive(pid: u32) -> bool {
@@ -108,6 +120,37 @@ pub fn remove_daemon_file() {
 }
 
 pub async fn ensure_daemon_running() -> Result<DaemonInfo, String> {
+    if crate::is_dev() {
+        println!("[termi] Dev mode: starting fresh in-process server on next free port (never re-attaching)...");
+        let sm = std::sync::Arc::new(crate::session::SessionManager::new());
+        sm.load_saved_sessions().await;
+
+        let token = uuid::Uuid::new_v4().to_string();
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(4);
+
+        let (server_url, bound_port, _app_state, _server_handle) =
+            crate::server::start_server(sm.clone(), token.clone(), shutdown_tx)
+                .await
+                .map_err(|e| format!("Failed to start dev server: {e}"))?;
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let dev_info = DaemonInfo {
+            pid: std::process::id(),
+            port: bound_port,
+            url: server_url,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            token,
+            started_at: now,
+        };
+
+        let _ = write_daemon_info(&dev_info);
+        return Ok(dev_info);
+    }
+
     if let Some(info) = read_daemon_info() {
         if is_daemon_alive(&info).await {
             println!("[termi] Connecting to existing background daemon on port {}", info.port);
@@ -302,5 +345,26 @@ mod tests {
         assert!(serialized.contains("startedAt"));
         let deserialized: DaemonInfo = serde_json::from_str(&serialized).expect("Failed to deserialize");
         assert_eq!(info, deserialized);
+    }
+
+    #[test]
+    fn test_daemon_file_paths_distinguish_dev_and_prod() {
+        let _guard = crate::ENV_LOCK.lock().unwrap();
+
+        // In dev mode (default during debug test)
+        let dev_file = get_daemon_file_path().unwrap();
+        let dev_log = get_daemon_log_path().unwrap();
+        assert!(dev_file.to_string_lossy().ends_with("daemon-dev.json"));
+        assert!(dev_log.to_string_lossy().ends_with("daemon-dev.log"));
+
+        // In prod mode
+        std::env::set_var("TERMI_ENV", "production");
+        let prod_file = get_daemon_file_path().unwrap();
+        let prod_log = get_daemon_log_path().unwrap();
+        assert!(prod_file.to_string_lossy().ends_with("daemon.json"));
+        assert!(!prod_file.to_string_lossy().ends_with("daemon-dev.json"));
+        assert!(prod_log.to_string_lossy().ends_with("daemon.log"));
+        assert!(!prod_log.to_string_lossy().ends_with("daemon-dev.log"));
+        std::env::remove_var("TERMI_ENV");
     }
 }

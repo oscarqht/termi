@@ -263,6 +263,12 @@ pub fn setup_tray(
                     let handle = app_handle.clone();
                     let d_info = daemon_info_for_menu.clone();
                     tauri::async_runtime::spawn(async move {
+                        if crate::is_dev() {
+                            crate::daemon::remove_daemon_file();
+                            handle.exit(0);
+                            return;
+                        }
+
                         let active_sessions = crate::daemon::get_daemon_session_count(&d_info).await.unwrap_or(0);
                         if active_sessions == 0 {
                             let _ = crate::daemon::stop_daemon(&d_info).await;

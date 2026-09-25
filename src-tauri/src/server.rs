@@ -790,21 +790,30 @@ async fn static_or_spa_fallback(uri: axum::http::Uri) -> axum::response::Respons
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+pub fn get_default_port() -> u16 {
+    if crate::is_dev() {
+        3201
+    } else {
+        3200
+    }
+}
+
 pub async fn start_server(
     session_manager: Arc<SessionManager>,
     token: String,
     shutdown_tx: tokio::sync::broadcast::Sender<()>,
 ) -> Result<(String, u16, Arc<AppState>, tokio::task::JoinHandle<()>), Box<dyn std::error::Error + Send + Sync>> {
     let host = resolve_host();
+    let default_port = get_default_port();
     let initial_port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(3200);
+        .unwrap_or(default_port);
 
     let mut listener = None;
     let mut bound_port = initial_port;
 
-    for port in initial_port..(initial_port + 20) {
+    for port in initial_port..(initial_port + 50) {
         let addr = format!("0.0.0.0:{port}");
         match tokio::net::TcpListener::bind(&addr).await {
             Ok(l) => {
@@ -823,7 +832,7 @@ pub async fn start_server(
         None => {
             return Err(format!(
                 "Could not bind to any port in range {initial_port}..{}",
-                initial_port + 20
+                initial_port + 50
             )
             .into());
         }
@@ -902,4 +911,22 @@ pub async fn start_server(
     });
 
     Ok((server_url, bound_port, state, handle))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_port_dev_vs_prod() {
+        let _guard = crate::ENV_LOCK.lock().unwrap();
+
+        // Dev mode (default during debug test)
+        assert_eq!(get_default_port(), 3201);
+
+        // Prod mode
+        std::env::set_var("TERMI_ENV", "production");
+        assert_eq!(get_default_port(), 3200);
+        std::env::remove_var("TERMI_ENV");
+    }
 }

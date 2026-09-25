@@ -18,6 +18,11 @@ pub struct CustomScript {
 }
 
 pub fn get_custom_scripts_file_path() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("TERMI_CONFIG_DIR") {
+        if !dir.trim().is_empty() {
+            return Some(PathBuf::from(dir.trim()).join("custom_scripts.json"));
+        }
+    }
     #[cfg(windows)]
     {
         if let Some(config) = dirs::config_dir() {
@@ -25,6 +30,13 @@ pub fn get_custom_scripts_file_path() -> Option<PathBuf> {
         }
     }
     dirs::home_dir().map(|h| h.join(".config").join("termi").join("custom_scripts.json"))
+}
+
+pub fn get_custom_scripts_backup_file_path() -> Option<PathBuf> {
+    get_custom_scripts_file_path().map(|p| {
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("custom_scripts.json");
+        p.with_file_name(format!("{}.bak", name))
+    })
 }
 
 pub fn default_custom_scripts() -> Vec<CustomScript> {
@@ -110,6 +122,18 @@ pub async fn load_custom_scripts() -> Vec<CustomScript> {
     };
 
     if !file_path.exists() {
+        if let Some(bak_path) = get_custom_scripts_backup_file_path() {
+            if bak_path.exists() {
+                if let Ok(bak_content) = fs::read_to_string(&bak_path).await {
+                    if let Ok(bak_scripts) = serde_json::from_str::<Vec<CustomScript>>(&bak_content) {
+                        if !bak_scripts.is_empty() {
+                            let _ = save_custom_scripts(&bak_scripts).await;
+                            return bak_scripts;
+                        }
+                    }
+                }
+            }
+        }
         let defaults = default_custom_scripts();
         let _ = save_custom_scripts(&defaults).await;
         return defaults;
@@ -119,14 +143,35 @@ pub async fn load_custom_scripts() -> Vec<CustomScript> {
         Ok(c) => c,
         Err(e) => {
             eprintln!("[termi] Failed to read custom scripts file: {e}");
+            if let Some(bak_path) = get_custom_scripts_backup_file_path() {
+                if let Ok(bak_content) = fs::read_to_string(&bak_path).await {
+                    if let Ok(bak_scripts) = serde_json::from_str::<Vec<CustomScript>>(&bak_content) {
+                        return bak_scripts;
+                    }
+                }
+            }
             return default_custom_scripts();
         }
     };
 
     match serde_json::from_str::<Vec<CustomScript>>(&content) {
-        Ok(scripts) => scripts,
+        Ok(scripts) => {
+            if !scripts.is_empty() {
+                if let Some(bak_path) = get_custom_scripts_backup_file_path() {
+                    let _ = fs::copy(&file_path, &bak_path).await;
+                }
+            }
+            scripts
+        }
         Err(e) => {
             eprintln!("[termi] Failed to parse custom scripts JSON: {e}");
+            if let Some(bak_path) = get_custom_scripts_backup_file_path() {
+                if let Ok(bak_content) = fs::read_to_string(&bak_path).await {
+                    if let Ok(bak_scripts) = serde_json::from_str::<Vec<CustomScript>>(&bak_content) {
+                        return bak_scripts;
+                    }
+                }
+            }
             default_custom_scripts()
         }
     }
@@ -151,8 +196,22 @@ pub async fn save_custom_scripts(scripts: &[CustomScript]) -> Result<(), std::io
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
     let temp_path = file_path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
-    fs::write(&temp_path, json).await?;
+    fs::write(&temp_path, &json).await?;
+
+    if file_path.exists() {
+        if let Some(bak_path) = get_custom_scripts_backup_file_path() {
+            let _ = fs::copy(&file_path, &bak_path).await;
+        }
+    }
+
     fs::rename(&temp_path, &file_path).await?;
+
+    if !scripts.is_empty() {
+        if let Some(bak_path) = get_custom_scripts_backup_file_path() {
+            let _ = fs::write(&bak_path, json).await;
+        }
+    }
+
     Ok(())
 }
 
