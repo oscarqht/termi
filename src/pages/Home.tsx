@@ -132,6 +132,7 @@ export default function Home() {
 
   const secondaryWorktrees = (gitInfo?.worktrees || []).filter((w) => !w.isMain);
   const normalizedBranchPreview = normalizeBranchName(newBranchInput);
+  const isBranchNameMissing = gitMode === 'branch' && !normalizedBranchPreview;
 
   const sessionGroups = useMemo(() => {
     return groupAndSortSessions(sessions, defaultCwd);
@@ -427,6 +428,9 @@ export default function Home() {
 
   function openTerminal(e?: React.FormEvent) {
     if (e) e.preventDefault();
+    if (isBranchNameMissing) {
+      return;
+    }
     if (gitMode === 'branch') {
       const normalized = normalizeBranchName(newBranchInput);
       if (!normalized) {
@@ -439,6 +443,9 @@ export default function Home() {
   }
 
   function openInNewTab() {
+    if (isBranchNameMissing) {
+      return;
+    }
     if (gitMode === 'branch') {
       const normalized = normalizeBranchName(newBranchInput);
       if (!normalized) {
@@ -464,6 +471,9 @@ export default function Home() {
   }
 
   async function copyUrl() {
+    if (isBranchNameMissing) {
+      return;
+    }
     rememberCurrentValues();
     const url = termUrl();
     try {
@@ -883,13 +893,30 @@ export default function Home() {
                   </div>
 
                   <div className="form-actions" style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
-                    <Button type="submit" variant="primary">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={isBranchNameMissing}
+                      title={isBranchNameMissing ? 'Please provide a new branch name' : undefined}
+                    >
                       Open terminal
                     </Button>
-                    <Button type="button" variant="secondary" onClick={openInNewTab}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={openInNewTab}
+                      disabled={isBranchNameMissing}
+                      title={isBranchNameMissing ? 'Please provide a new branch name' : undefined}
+                    >
                       Open in new tab
                     </Button>
-                    <Button type="button" variant="secondary" onClick={copyUrl}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={copyUrl}
+                      disabled={isBranchNameMissing}
+                      title={isBranchNameMissing ? 'Please provide a new branch name' : undefined}
+                    >
                       {copied ? 'Copied!' : 'Copy URL'}
                     </Button>
                   </div>
