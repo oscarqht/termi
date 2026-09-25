@@ -138,6 +138,10 @@ export default function Terminal() {
   const [customScriptsOpen, setCustomScriptsOpen] = useState(false);
   const customScriptsOpenRef = useRef(customScriptsOpen);
   customScriptsOpenRef.current = customScriptsOpen;
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const confirmCloseOpenRef = useRef(confirmCloseOpen);
+  confirmCloseOpenRef.current = confirmCloseOpen;
+  const [closingSession, setClosingSession] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const currentTitle = sessionTitle.trim() || (cwd.trim() ? getFolderName(cwd) : '') || 'termi';
@@ -525,10 +529,10 @@ export default function Terminal() {
       if (term) {
         if (editorOpenRef.current) {
           textEditorRef.current?.focus();
-        } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+        } else if (!savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
           term.focus();
           requestAnimationFrame(() => {
-            if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+            if (!editorOpenRef.current && !savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
               term.focus();
             }
           });
@@ -603,10 +607,10 @@ export default function Terminal() {
       xtermRef.current = term;
       if (editorOpenRef.current) {
         textEditorRef.current?.focus();
-      } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+      } else if (!savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
         term.focus();
         requestAnimationFrame(() => {
-          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
             term.focus();
           }
         });
@@ -704,10 +708,10 @@ export default function Terminal() {
       if (document.visibilityState === 'hidden' || isExplicitExitRef.current) return;
       if (editorOpenRef.current) {
         textEditorRef.current?.focus();
-      } else if (!savedPromptsOpenRef.current && !settingsOpenRef.current) {
+      } else if (!savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
         xtermRef.current?.focus();
         requestAnimationFrame(() => {
-          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !settingsOpenRef.current) {
+          if (!editorOpenRef.current && !savedPromptsOpenRef.current && !customScriptsOpenRef.current && !settingsOpenRef.current && !confirmCloseOpenRef.current) {
             xtermRef.current?.focus();
           }
         });
@@ -809,7 +813,9 @@ export default function Terminal() {
       if (
         editorOpenRef.current ||
         savedPromptsOpenRef.current ||
-        (e.target as HTMLElement)?.closest?.('.text-editor-dialog, .saved-prompts-dialog')
+        customScriptsOpenRef.current ||
+        confirmCloseOpenRef.current ||
+        (e.target as HTMLElement)?.closest?.('.text-editor-dialog, .saved-prompts-dialog, .modal-dialog')
       ) {
         return;
       }
@@ -1020,6 +1026,7 @@ export default function Terminal() {
   }
 
   async function handleClose() {
+    setClosingSession(true);
     isExplicitExitRef.current = true;
     clearReconnectTimer();
     if (sessionIdRef.current) {
@@ -1214,7 +1221,13 @@ export default function Terminal() {
     <div
       className="terminal-page"
       onClick={(e) => {
-        if (editorOpenRef.current || savedPromptsOpenRef.current || settingsOpenRef.current) return;
+        if (
+          editorOpenRef.current ||
+          savedPromptsOpenRef.current ||
+          customScriptsOpenRef.current ||
+          settingsOpenRef.current ||
+          confirmCloseOpenRef.current
+        ) return;
         const target = e.target as HTMLElement | null;
         if (target && !target.closest('button, input, textarea, a, .modal-dialog, .floating-toolbar')) {
           xtermRef.current?.focus();
@@ -1247,41 +1260,6 @@ export default function Terminal() {
         {phase === 'connected' && (
           <button
             className="icon-button"
-            onClick={handleAttachClick}
-            title="Attach a file or image"
-            aria-label="Attach a file or image"
-            disabled={uploading}
-          >
-            {uploading ? (
-              <svg viewBox="0 0 24 24" width="18" height="18" className="spin" aria-hidden="true">
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeDasharray="42"
-                  strokeDashoffset="14"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-                <path
-                  d="M17.5 9.5 9.75 17.25a3.5 3.5 0 1 1-4.95-4.95l8.4-8.4a2.5 2.5 0 1 1 3.54 3.54l-8.13 8.13a1.5 1.5 0 1 1-2.12-2.12l6.72-6.72"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            )}
-          </button>
-        )}
-        {phase === 'connected' && (
-          <button
-            className="icon-button"
             onClick={() => setEditorOpen(true)}
             title="Text editor (⌘⇧E / Ctrl+Shift+E)"
             aria-label="Text editor"
@@ -1299,28 +1277,6 @@ export default function Terminal() {
             >
               <path d="M12 20h9" />
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-          </button>
-        )}
-        {phase === 'connected' && (
-          <button
-            className="icon-button"
-            onClick={() => setSavedPromptsOpen(true)}
-            title="Saved prompts (⌘⇧P / Ctrl+Shift+P)"
-            aria-label="Saved prompts"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
           </button>
         )}
@@ -1371,8 +1327,31 @@ export default function Terminal() {
           </button>
         )}
         <button
+          className="icon-button"
+          onClick={() => {
+            window.location.href = '/';
+          }}
+          title="Home (keep session running)"
+          aria-label="Home"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg>
+        </button>
+        <button
           className="icon-button danger"
-          onClick={handleClose}
+          onClick={() => setConfirmCloseOpen(true)}
           title="Close session"
           aria-label="Close session"
         >
@@ -1446,6 +1425,62 @@ export default function Terminal() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {confirmCloseOpen && (
+        <div
+          className="modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !closingSession) setConfirmCloseOpen(false);
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape' && !closingSession) setConfirmCloseOpen(false);
+          }}
+        >
+          <div
+            className="modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-close-dialog-title"
+          >
+            <div className="modal-header">
+              <h2 id="confirm-close-dialog-title">Close session?</h2>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setConfirmCloseOpen(false)}
+                disabled={closingSession}
+                aria-label="Cancel and close dialog"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                Are you sure you want to close this session? This will terminate all running processes.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setConfirmCloseOpen(false)}
+                disabled={closingSession}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={handleClose}
+                disabled={closingSession}
+                autoFocus
+              >
+                {closingSession ? 'Closing…' : 'Close Session'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1528,7 +1563,8 @@ export default function Terminal() {
             !editorOpenRef.current &&
             !savedPromptsOpenRef.current &&
             !customScriptsOpenRef.current &&
-            !settingsOpenRef.current
+            !settingsOpenRef.current &&
+            !confirmCloseOpenRef.current
           ) {
             xtermRef.current?.focus();
           }
