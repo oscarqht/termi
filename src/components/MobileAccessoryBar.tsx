@@ -227,6 +227,28 @@ export const MobileAccessoryBar: FC<MobileAccessoryBarProps> = ({
             →
           </button>
 
+          {/* Page Up / Page Down */}
+          <button
+            type="button"
+            className="mobile-key-btn"
+            onMouseDown={preventBlur}
+            onTouchStart={preventBlur}
+            onClick={() => handleKeyClick('\x1b[5~')}
+            aria-label="Page Up"
+          >
+            PgUp
+          </button>
+          <button
+            type="button"
+            className="mobile-key-btn"
+            onMouseDown={preventBlur}
+            onTouchStart={preventBlur}
+            onClick={() => handleKeyClick('\x1b[6~')}
+            aria-label="Page Down"
+          >
+            PgDn
+          </button>
+
           {/* Common shell symbols hard to reach on mobile */}
           <button
             type="button"

@@ -31,6 +31,8 @@ export function setupTerminalTouchScroll({
   let startX = 0;
   let startY = 0;
   let lastY = 0;
+  let lastTouchClientX = 0;
+  let lastTouchClientY = 0;
   let direction: 'vertical' | 'horizontal' | null = null;
   let hasMoved = false;
   let momentumInterrupted = false;
@@ -68,10 +70,92 @@ export function setupTerminalTouchScroll({
     return 17;
   }
 
+  function getCellDimensions(): { width: number; height: number } {
+    try {
+      const core = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { width?: number; height?: number } } } } } })._core;
+      const w = core?._renderService?.dimensions?.css?.cell?.width;
+      const h = core?._renderService?.dimensions?.css?.cell?.height;
+      if (typeof w === 'number' && w > 0 && typeof h === 'number' && h > 0) {
+        return { width: w, height: h };
+      }
+    } catch {}
+
+    const h = getCellHeight();
+    const w = Math.round(h * 0.55);
+    return { width: w > 0 ? w : 9, height: h };
+  }
+
+  function isMouseTrackingActive(): boolean {
+    if (term.modes.mouseTrackingMode && term.modes.mouseTrackingMode !== 'none') {
+      return true;
+    }
+    const core = (term as unknown as { _core?: { coreMouseService?: { areMouseEventsActive?: boolean } } })._core;
+    return !!core?.coreMouseService?.areMouseEventsActive;
+  }
+
+  function sendMouseWheel(lines: number) {
+    const count = Math.min(Math.abs(lines), 5);
+    // In terminal mouse protocol: action 0 = UP (scroll up, finger moving down), 1 = DOWN (scroll down, finger moving up)
+    const action = lines > 0 ? 1 : 0;
+
+    const core = (term as unknown as {
+      _core?: {
+        coreMouseService?: {
+          triggerMouseEvent?: (event: any) => boolean;
+        };
+      };
+    })._core;
+
+    const rect = container.getBoundingClientRect();
+    const cellDim = getCellDimensions();
+    const relX = Math.max(0, lastTouchClientX - rect.left);
+    const relY = Math.max(0, lastTouchClientY - rect.top);
+    const col = Math.max(0, Math.min(term.cols - 1, Math.floor(relX / cellDim.width)));
+    const row = Math.max(0, Math.min(term.rows - 1, Math.floor(relY / cellDim.height)));
+
+    let triggered = false;
+    if (core?.coreMouseService?.triggerMouseEvent) {
+      for (let i = 0; i < count; i++) {
+        const ok = core.coreMouseService.triggerMouseEvent({
+          col,
+          row,
+          x: Math.round(relX),
+          y: Math.round(relY),
+          button: 4, // CoreMouseButton.WHEEL
+          action,
+          ctrl: false,
+          alt: false,
+          shift: false,
+        });
+        if (ok) triggered = true;
+      }
+    }
+
+    if (!triggered) {
+      // Fallback: send SGR mouse wheel sequence directly (1-based col and row)
+      const sgrCode = lines > 0 ? 65 : 64; // 64 = wheel up, 65 = wheel down
+      const seq = `\x1b[<${sgrCode};${col + 1};${row + 1}M`;
+      onSendInput(seq.repeat(count));
+    }
+  }
+
   function scrollBuffer(pixelDelta: number) {
     const cellHeight = getCellHeight();
+
+    // 1. If mouse tracking is active (e.g. Claude CLI / Code, tmux with mouse, vim with mouse)
+    if (isMouseTrackingActive()) {
+      accumulatedDelta += pixelDelta;
+      if (Math.abs(accumulatedDelta) >= cellHeight) {
+        const lines = Math.trunc(accumulatedDelta / cellHeight);
+        accumulatedDelta -= lines * cellHeight;
+        sendMouseWheel(lines);
+      }
+      return true;
+    }
+
     const isAltBuffer = term.buffer.active.type === 'alternate';
 
+    // 2. Alternate buffer without mouse tracking (e.g. vim, nano, less, man)
     if (isAltBuffer) {
       accumulatedDelta += pixelDelta;
       if (Math.abs(accumulatedDelta) >= cellHeight) {
@@ -88,7 +172,7 @@ export function setupTerminalTouchScroll({
       return true;
     }
 
-    // Normal buffer history scrolling
+    // 3. Normal buffer history scrolling
     const atBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
     const atTop = term.buffer.active.viewportY <= 0;
 
@@ -160,6 +244,8 @@ export function setupTerminalTouchScroll({
     startX = touch.clientX;
     startY = touch.clientY;
     lastY = touch.clientY;
+    lastTouchClientX = touch.clientX;
+    lastTouchClientY = touch.clientY;
     direction = null;
     hasMoved = false;
     accumulatedDelta = 0;
@@ -190,6 +276,8 @@ export function setupTerminalTouchScroll({
 
     const currentX = touch.clientX;
     const currentY = touch.clientY;
+    lastTouchClientX = currentX;
+    lastTouchClientY = currentY;
     const dx = currentX - startX;
     const dy = currentY - startY;
 
