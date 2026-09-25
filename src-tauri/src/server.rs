@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path as AxumPath, Query, State};
+use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures::{SinkExt, StreamExt};
+use tokio::io::AsyncWriteExt;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
@@ -596,6 +597,9 @@ fn verify_token(state: &AppState, headers: &axum::http::HeaderMap) -> bool {
     false
 }
 
+// Cap a single uploaded file at 100MB.
+pub const UPLOAD_MAX_BYTES: usize = 100 * 1024 * 1024;
+
 #[derive(Deserialize)]
 pub struct UploadQuery {
     pub name: Option<String>,
@@ -605,7 +609,7 @@ async fn upload_file(
     AxumPath(id): AxumPath<String>,
     Query(query): Query<UploadQuery>,
     State(state): State<Arc<AppState>>,
-    body: axum::body::Bytes,
+    body: axum::body::Body,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     let session = match state.session_manager.get(&id).await {
         Some(s) => s,
@@ -621,10 +625,43 @@ async fn upload_file(
     let safe_name = sanitize_filename(&raw_name);
     let dest_path = unique_dest_path(&session.upload_dir, &safe_name);
 
-    if let Err(e) = std::fs::write(&dest_path, &body) {
+    let mut file = match tokio::fs::File::create(&dest_path).await {
+        Ok(f) => f,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": format!("Failed to create file: {e}") })),
+            ));
+        }
+    };
+
+    let mut stream = body.into_data_stream();
+    while let Some(chunk_res) = stream.next().await {
+        match chunk_res {
+            Ok(chunk) => {
+                if let Err(e) = file.write_all(&chunk).await {
+                    let _ = tokio::fs::remove_file(&dest_path).await;
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({ "error": format!("Failed to write file: {e}") })),
+                    ));
+                }
+            }
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&dest_path).await;
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": format!("Upload stream error: {e}") })),
+                ));
+            }
+        }
+    }
+
+    if let Err(e) = file.flush().await {
+        let _ = tokio::fs::remove_file(&dest_path).await;
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": format!("Failed to write file: {e}") })),
+            Json(serde_json::json!({ "error": format!("Failed to finalize file: {e}") })),
         ));
     }
 
@@ -869,7 +906,10 @@ pub async fn start_server(
                 .delete(delete_session),
         )
         .route("/api/sessions/{id}/activate", post(activate_session_handler))
-        .route("/api/sessions/{id}/upload", post(upload_file))
+        .route(
+            "/api/sessions/{id}/upload",
+            post(upload_file).layer(DefaultBodyLimit::max(UPLOAD_MAX_BYTES)),
+        )
         .route("/api/default-cwd", get(get_default_cwd))
         .route(
             "/api/recent-cwds",
