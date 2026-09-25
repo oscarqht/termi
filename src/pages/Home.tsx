@@ -16,6 +16,7 @@ import {
 import { SavedPromptsModal } from '../components/SavedPromptsModal';
 import HeaderUpdater from '../components/HeaderUpdater';
 import { abbreviatePath, formatPathDisplay, isSameCwd } from '../pathUtils';
+import { Card, Button, Badge, Header } from '../components/ui';
 
 export type SessionInfo = {
   id: string;
@@ -345,114 +346,145 @@ export default function Home() {
 
   return (
     <main className="page">
-      <div className="header-row">
-        <div className="header-brand">
-          <img src="/app-icon.png" alt="termi" className="header-app-icon" />
-          <h1>termi</h1>
-        </div>
-        <HeaderUpdater />
-      </div>
-      <p className="subtitle">Open a browser tab backed by a real local terminal.</p>
+      <Header
+        title="termi"
+        subtitle="Open a browser tab backed by a real local terminal."
+        iconSrc="/app-icon.png"
+        actions={<HeaderUpdater />}
+      />
 
-      <form onSubmit={openTerminal} className="new-terminal-form">
-        <label>
-          Working directory
-          <div className="input-with-button">
-            <input
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder="~/projects/my-app"
-              list="recent-cwds"
-            />
-            <button type="button" className="secondary" onClick={browseFolder}>
-              Browse…
-            </button>
-          </div>
-        </label>
-        {recentCwds.length > 0 && (
-          <div className="recent-cwds-container">
-            <span className="recent-cwds-label">Recently used</span>
-            <div className="recent-cwds-chips">
-              {recentCwds.map((pathItem) => {
-                const { name } = formatPathDisplay(pathItem, defaultCwd);
-                const abbr = abbreviatePath(pathItem, defaultCwd);
-                const isSelected = isSameCwd(cwd, pathItem, defaultCwd);
-                return (
-                  <button
-                    key={pathItem}
-                    type="button"
-                    className={`recent-cwd-chip ${isSelected ? 'active' : ''}`}
-                    onClick={() => setCwd(pathItem)}
-                    title={pathItem}
-                  >
-                    <span className="recent-cwd-chip-name">{name}</span>
-                    <span className="recent-cwd-chip-abbr">({abbr})</span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      className="recent-cwd-chip-remove"
-                      onClick={(e) => removeRecentCwdEntry(pathItem, e)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          removeRecentCwdEntry(pathItem, e as unknown as React.MouseEvent);
-                        }
-                      }}
-                      title={`Remove ${pathItem} from history`}
-                      aria-label={`Remove ${pathItem}`}
-                    >
-                      ×
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        <datalist id="recent-cwds">
-          {recentCwds.map((c) => (
-            <option value={c} key={c} />
-          ))}
-        </datalist>
-        <datalist id="recent-cmds">
-          {recentCmds.map((c) => (
-            <option value={c} key={c} />
-          ))}
-        </datalist>
-        <div className="cmd-list">
-          <span className="cmd-list-label">Initial command (optional)</span>
-          {cmds.map((cmd, i) => (
-            <div className="input-with-button" key={i}>
-              <input
-                value={cmd}
-                onChange={(e) => updateCmd(i, e.target.value)}
-                placeholder="npm run dev"
-                list="recent-cmds"
-              />
-              {cmds.length > 1 && (
-                <button type="button" className="secondary" onClick={() => removeCmd(i)}>
-                  Remove
-                </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <form onSubmit={openTerminal} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <Card
+            title="Launch Session"
+            subtitle="Configure working directory and startup commands"
+            icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                Working directory
+                <div className="input-with-button">
+                  <input
+                    value={cwd}
+                    onChange={(e) => setCwd(e.target.value)}
+                    placeholder="~/projects/my-app"
+                    list="recent-cwds"
+                  />
+                  <Button type="button" variant="secondary" onClick={browseFolder}>
+                    Browse…
+                  </Button>
+                </div>
+              </label>
+
+              {recentCwds.length > 0 && (
+                <div className="recent-cwds-container">
+                  <span className="recent-cwds-label">Recently used</span>
+                  <div className="recent-cwds-chips">
+                    {recentCwds.map((pathItem) => {
+                      const { name } = formatPathDisplay(pathItem, defaultCwd);
+                      const abbr = abbreviatePath(pathItem, defaultCwd);
+                      const isSelected = isSameCwd(cwd, pathItem, defaultCwd);
+                      return (
+                        <button
+                          key={pathItem}
+                          type="button"
+                          className={`recent-cwd-chip ${isSelected ? 'active' : ''}`}
+                          onClick={() => setCwd(pathItem)}
+                          title={pathItem}
+                        >
+                          <span className="recent-cwd-chip-name">{name}</span>
+                          <span className="recent-cwd-chip-abbr">({abbr})</span>
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            className="recent-cwd-chip-remove"
+                            onClick={(e) => removeRecentCwdEntry(pathItem, e)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                removeRecentCwdEntry(pathItem, e as unknown as React.MouseEvent);
+                              }
+                            }}
+                            title={`Remove ${pathItem} from history`}
+                            aria-label={`Remove ${pathItem}`}
+                          >
+                            ×
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
-            </div>
-          ))}
-          <button type="button" className="secondary" onClick={addCmd}>
-            + Add another command
-          </button>
-        </div>
 
-        <div className="common-cmds-section">
-          <div className="common-cmds-header">
-            <div>
-              <span className="cmd-list-label">Common initial commands</span>
-              <p className="common-cmds-desc">
-                Select commands to include in Open Terminal or Copy URL.
-              </p>
+              <datalist id="recent-cwds">
+                {recentCwds.map((c) => (
+                  <option value={c} key={c} />
+                ))}
+              </datalist>
+              <datalist id="recent-cmds">
+                {recentCmds.map((c) => (
+                  <option value={c} key={c} />
+                ))}
+              </datalist>
+
+              <div className="cmd-list">
+                <span className="cmd-list-label">Initial command (optional)</span>
+                {cmds.map((cmd, i) => (
+                  <div className="input-with-button" key={i}>
+                    <input
+                      value={cmd}
+                      onChange={(e) => updateCmd(i, e.target.value)}
+                      placeholder="npm run dev"
+                      list="recent-cmds"
+                    />
+                    {cmds.length > 1 && (
+                      <Button type="button" variant="secondary" onClick={() => removeCmd(i)}>
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button type="button" variant="secondary" size="sm" onClick={addCmd}>
+                  + Add another command
+                </Button>
+              </div>
+
+              <div className="form-actions" style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                <Button type="submit" variant="primary">
+                  Open terminal
+                </Button>
+                <Button type="button" variant="secondary" onClick={copyUrl}>
+                  {copied ? 'Copied!' : 'Copy URL'}
+                </Button>
+              </div>
             </div>
-            {commonCmds.length > 0 && (
-              <div className="common-cmds-header-actions">
-                <button
+          </Card>
+
+          <Card
+            title="Common Commands"
+            subtitle="Preset commands automatically included when selected"
+            badge={
+              <Badge variant={commonCmds.some((c) => c.enabled) ? 'info' : 'default'}>
+                {commonCmds.filter((c) => c.enabled).length} active
+              </Badge>
+            }
+            icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 11 12 14 22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+            }
+            extra={
+              commonCmds.length > 0 && (
+                <Button
                   type="button"
-                  className="link-button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     const allEnabled = commonCmds.every((c) => c.enabled);
                     setCommonCmds((prev) => {
@@ -463,211 +495,234 @@ export default function Home() {
                   }}
                 >
                   {commonCmds.every((c) => c.enabled) ? 'Deselect all' : 'Select all'}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="common-cmds-list">
-            {commonCmds.map((c) => (
-              <div key={c.id} className={`common-cmd-item${c.enabled ? ' active' : ''}`}>
-                <label className="common-cmd-label">
-                  <input
-                    type="checkbox"
-                    checked={c.enabled}
-                    onChange={() => toggleCommonCmd(c.id)}
-                  />
-                  <div className="common-cmd-info">
-                    <CopyableCode code={c.cmd} />
-                    {c.explanation && (
-                      <span className="common-cmd-explanation" title={c.explanation}>{c.explanation}</span>
-                    )}
+                </Button>
+              )
+            }
+          >
+            <div className="common-cmds-section" style={{ margin: 0, padding: 0, border: 'none' }}>
+              <div className="common-cmds-list">
+                {commonCmds.map((c) => (
+                  <div key={c.id} className={`common-cmd-item${c.enabled ? ' active' : ''}`}>
+                    <label className="common-cmd-label">
+                      <input
+                        type="checkbox"
+                        checked={c.enabled}
+                        onChange={() => toggleCommonCmd(c.id)}
+                      />
+                      <div className="common-cmd-info">
+                        <CopyableCode code={c.cmd} />
+                        {c.explanation && (
+                          <span className="common-cmd-explanation" title={c.explanation}>{c.explanation}</span>
+                        )}
+                      </div>
+                    </label>
+                    <button
+                      type="button"
+                      className="common-cmd-remove-btn"
+                      onClick={() => removeCommonCmd(c.id)}
+                      title="Remove command"
+                      aria-label={`Remove ${c.cmd}`}
+                    >
+                      &times;
+                    </button>
                   </div>
-                </label>
-                <button
-                  type="button"
-                  className="common-cmd-remove-btn"
-                  onClick={() => removeCommonCmd(c.id)}
-                  title="Remove command"
-                  aria-label={`Remove ${c.cmd}`}
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
-            {commonCmds.length === 0 && (
-              <div className="common-cmds-empty">
-                <p className="muted">No common commands configured.</p>
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={resetCommonCmds}
-                >
-                  Restore default examples
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="add-common-cmd-row">
-            <input
-              value={newCmd}
-              onChange={(e) => setNewCmd(e.target.value)}
-              placeholder="Command (e.g. agy)"
-              className="add-common-cmd-input"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addCommonCmd();
-                }
-              }}
-            />
-            <input
-              value={newExplanation}
-              onChange={(e) => setNewExplanation(e.target.value)}
-              placeholder="Concise explanation (e.g. Google Antigravity CLI)"
-              className="add-common-explanation-input"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addCommonCmd();
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="secondary"
-              onClick={addCommonCmd}
-              disabled={!newCmd.trim()}
-            >
-              + Add
-            </button>
-          </div>
-        </div>
-
-        <div className="form-actions">
-          <button type="submit">Open terminal</button>
-          <button type="button" className="secondary" onClick={copyUrl}>
-            {copied ? 'Copied!' : 'Copy URL'}
-          </button>
-        </div>
-      </form>
-
-      <h2>Active sessions</h2>
-      {sessions.length === 0 && <p className="muted">No terminals running.</p>}
-      <ul className="session-list">
-        {sessions.map((s) => (
-          <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
-            <div className="session-info">
-              <span className="dot" />
-              <div className="session-details">
-                {s.title?.trim() ? (
-                  <div className="session-title" title={s.title.trim()}>{s.title.trim()}</div>
-                ) : null}
-                <div className="session-cwd">
-                  <CopyableCode code={s.cwd} />
-                </div>
-                {s.cmd?.trim() ? (
-                  <div className="session-cmd">
-                    <CopyableCode code={s.cmd.trim()} />
+                ))}
+                {commonCmds.length === 0 && (
+                  <div className="common-cmds-empty">
+                    <p className="muted">No common commands configured.</p>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={resetCommonCmds}
+                    >
+                      Restore default examples
+                    </button>
                   </div>
-                ) : null}
+                )}
+              </div>
+
+              <div className="add-common-cmd-row">
+                <input
+                  value={newCmd}
+                  onChange={(e) => setNewCmd(e.target.value)}
+                  placeholder="Command (e.g. agy)"
+                  className="add-common-cmd-input"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addCommonCmd();
+                    }
+                  }}
+                />
+                <input
+                  value={newExplanation}
+                  onChange={(e) => setNewExplanation(e.target.value)}
+                  placeholder="Concise explanation (e.g. Google Antigravity CLI)"
+                  className="add-common-explanation-input"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addCommonCmd();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={addCommonCmd}
+                  disabled={!newCmd.trim()}
+                >
+                  + Add
+                </Button>
               </div>
             </div>
-            <div className="session-actions">
-              <button type="button" className="secondary small" onClick={() => resumeSession(s.id, s.cwd)}>Resume</button>
-              <button type="button" className="danger small" onClick={() => closeSession(s.id)}>Close</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+          </Card>
+        </form>
 
-      <section className="saved-prompts-home-section" style={{ marginTop: '2.5rem' }}>
-        <div className="saved-prompts-home-header">
-          <div>
-            <h2>Saved prompts ({savedPrompts.length})</h2>
-            <p className="saved-prompts-desc">
-              Reusable prompt templates accessible across all terminal sessions and the text editor.
-            </p>
-          </div>
-          <div className="saved-prompts-header-actions">
-            <button
+        <Card
+          title="Active Sessions"
+          subtitle="Running terminals currently managed by termi"
+          badge={
+            <Badge variant={sessions.length > 0 ? 'success' : 'default'}>
+              {sessions.length} running
+            </Badge>
+          }
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 14 14" />
+            </svg>
+          }
+        >
+          {sessions.length === 0 && <p className="muted" style={{ margin: '0.25rem 0' }}>No terminals running.</p>}
+          {sessions.length > 0 && (
+            <ul className="session-list" style={{ margin: 0 }}>
+              {sessions.map((s) => (
+                <li key={s.id} className={s.connected ? 'connected' : 'disconnected'}>
+                  <div className="session-info">
+                    <span className="dot" />
+                    <div className="session-details">
+                      {s.title?.trim() ? (
+                        <div className="session-title" title={s.title.trim()}>{s.title.trim()}</div>
+                      ) : null}
+                      <div className="session-cwd">
+                        <CopyableCode code={s.cwd} />
+                      </div>
+                      {s.cmd?.trim() ? (
+                        <div className="session-cmd">
+                          <CopyableCode code={s.cmd.trim()} />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="session-actions">
+                    <Button type="button" variant="secondary" size="sm" onClick={() => resumeSession(s.id, s.cwd)}>
+                      Resume
+                    </Button>
+                    <Button type="button" variant="danger" size="sm" onClick={() => closeSession(s.id)}>
+                      Close
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card
+          title="Saved Prompts"
+          subtitle="Reusable prompt templates accessible across all terminal sessions and editor"
+          badge={
+            <Badge variant="info">
+              {savedPrompts.length}
+            </Badge>
+          }
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          }
+          extra={
+            <Button
               type="button"
-              className="secondary small"
+              variant="secondary"
+              size="sm"
               onClick={() => setSavedPromptsModalOpen(true)}
             >
               Manage prompts
-            </button>
-          </div>
-        </div>
-
-        <div className="saved-prompts-home-list">
-          {savedPrompts.map((p) => (
-            <div key={p.id} className="saved-prompt-home-item">
-              <div className="saved-prompt-home-item-header">
-                <span className="saved-prompt-home-item-title">{p.title}</span>
-                <div className="saved-prompt-home-item-actions">
-                  <button
-                    type="button"
-                    className={`icon-button small${copiedPromptId === p.id ? ' copied' : ''}`}
-                    onClick={() => copySavedPromptFromHome(p.id, p.content)}
-                    title={copiedPromptId === p.id ? 'Copied!' : 'Copy prompt text'}
-                    aria-label={copiedPromptId === p.id ? 'Copied' : 'Copy prompt text'}
-                  >
-                    {copiedPromptId === p.id ? (
-                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="5" y="5" width="8" height="8" rx="1.5" />
-                        <path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    className="common-cmd-remove-btn"
-                    onClick={() => removeSavedPromptFromHome(p.id)}
-                    title="Remove prompt"
-                    aria-label={`Remove ${p.title}`}
-                  >
-                    &times;
-                  </button>
+            </Button>
+          }
+        >
+          <div className="saved-prompts-home-list" style={{ marginTop: '0.25rem' }}>
+            {savedPrompts.map((p) => (
+              <div key={p.id} className="saved-prompt-home-item">
+                <div className="saved-prompt-home-item-header">
+                  <span className="saved-prompt-home-item-title">{p.title}</span>
+                  <div className="saved-prompt-home-item-actions">
+                    <button
+                      type="button"
+                      className={`icon-button small${copiedPromptId === p.id ? ' copied' : ''}`}
+                      onClick={() => copySavedPromptFromHome(p.id, p.content)}
+                      title={copiedPromptId === p.id ? 'Copied!' : 'Copy prompt text'}
+                      aria-label={copiedPromptId === p.id ? 'Copied' : 'Copy prompt text'}
+                    >
+                      {copiedPromptId === p.id ? (
+                        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="5" y="5" width="8" height="8" rx="1.5" />
+                          <path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5H11" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="common-cmd-remove-btn"
+                      onClick={() => removeSavedPromptFromHome(p.id)}
+                      title="Remove prompt"
+                      aria-label={`Remove ${p.title}`}
+                    >
+                      &times;
+                    </button>
+                  </div>
                 </div>
+                <div className="saved-prompt-home-preview">{p.content}</div>
               </div>
-              <div className="saved-prompt-home-preview">{p.content}</div>
-            </div>
-          ))}
-          {savedPrompts.length === 0 && (
-            <p className="muted">No saved prompts configured.</p>
-          )}
-        </div>
+            ))}
+            {savedPrompts.length === 0 && (
+              <p className="muted">No saved prompts configured.</p>
+            )}
+          </div>
 
-        <div className="add-saved-prompt-home-row">
-          <input
-            value={newPromptTitle}
-            onChange={(e) => setNewPromptTitle(e.target.value)}
-            placeholder="Prompt title (e.g. Code Review)"
-            className="add-saved-prompt-title-input"
-          />
-          <textarea
-            value={newPromptContent}
-            onChange={(e) => setNewPromptContent(e.target.value)}
-            placeholder="Prompt content / instructions..."
-            rows={2}
-            className="add-saved-prompt-content-input"
-          />
-          <button
-            type="button"
-            className="secondary"
-            onClick={addSavedPromptFromHome}
-            disabled={!newPromptTitle.trim() && !newPromptContent.trim()}
-          >
-            + Add prompt
-          </button>
-        </div>
-      </section>
+          <div className="add-saved-prompt-home-row">
+            <input
+              value={newPromptTitle}
+              onChange={(e) => setNewPromptTitle(e.target.value)}
+              placeholder="Prompt title (e.g. Code Review)"
+              className="add-saved-prompt-title-input"
+            />
+            <textarea
+              value={newPromptContent}
+              onChange={(e) => setNewPromptContent(e.target.value)}
+              placeholder="Prompt content / instructions..."
+              rows={2}
+              className="add-saved-prompt-content-input"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={addSavedPromptFromHome}
+              disabled={!newPromptTitle.trim() && !newPromptContent.trim()}
+            >
+              + Add prompt
+            </Button>
+          </div>
+        </Card>
+      </div>
 
       <SavedPromptsModal
         isOpen={savedPromptsModalOpen}
@@ -680,3 +735,4 @@ export default function Home() {
     </main>
   );
 }
+
