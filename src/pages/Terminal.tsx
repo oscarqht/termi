@@ -1186,15 +1186,6 @@ export default function Terminal() {
           </div>
         )}
         <div className="form-actions">
-          <button type="button" onClick={() => startTerminal()}>
-            Start terminal
-          </button>
-          <button type="button" className="secondary" onClick={handleUpdateAndCopyUrl}>
-            {copiedUrl ? '✓ URL copied!' : 'Copy URL'}
-          </button>
-          <button type="button" className="secondary" onClick={startInNewTab}>
-            Start in new tab
-          </button>
           <button
             type="button"
             className="secondary"
@@ -1203,6 +1194,15 @@ export default function Terminal() {
             }}
           >
             Home
+          </button>
+          <button type="button" onClick={() => startTerminal()}>
+            Open terminal
+          </button>
+          <button type="button" className="secondary" onClick={startInNewTab}>
+            Open in new tab
+          </button>
+          <button type="button" className="secondary" onClick={handleUpdateAndCopyUrl}>
+            {copiedUrl ? '✓ URL copied!' : 'Copy URL'}
           </button>
         </div>
 

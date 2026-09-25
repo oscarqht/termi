@@ -304,8 +304,13 @@ export default function Home() {
     }
   }
 
-  function openTerminal(e: React.FormEvent) {
-    e.preventDefault();
+  function openTerminal(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    rememberCurrentValues();
+    window.location.href = termUrl();
+  }
+
+  function openInNewTab() {
     rememberCurrentValues();
     window.open(termUrl(), '_blank');
   }
@@ -489,6 +494,9 @@ export default function Home() {
               <div className="form-actions" style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
                 <Button type="submit" variant="primary">
                   Open terminal
+                </Button>
+                <Button type="button" variant="secondary" onClick={openInNewTab}>
+                  Open in new tab
                 </Button>
                 <Button type="button" variant="secondary" onClick={copyUrl}>
                   {copied ? 'Copied!' : 'Copy URL'}

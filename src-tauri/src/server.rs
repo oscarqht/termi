@@ -231,18 +231,113 @@ async fn delete_recent_cwd_handler(
     Json(serde_json::json!({ "cwds": cwds }))
 }
 
+async fn pick_folder_native() -> Result<Option<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = tokio::process::Command::new("osascript")
+            .arg("-e")
+            .arg("POSIX path of (choose folder with prompt \"Select working directory\")")
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run osascript: {e}"))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut path = stdout.trim().to_string();
+            if path.len() > 1 && path.ends_with('/') {
+                path.pop();
+            }
+            if !path.is_empty() {
+                return Ok(Some(path));
+            }
+            return Ok(None);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("-128") || stderr.to_lowercase().contains("user cancel") {
+            return Ok(None);
+        }
+
+        Err(format!("Folder picker failed: {}", stderr.trim()))
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let ps_cmd = r#"Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Select working directory'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }"#;
+        let output = tokio::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", ps_cmd])
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run PowerShell folder picker: {e}"))?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let path = stdout.trim().to_string();
+            if !path.is_empty() {
+                return Ok(Some(path));
+            }
+            return Ok(None);
+        }
+
+        Err("PowerShell folder picker failed".to_string())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Ok(output) = tokio::process::Command::new("zenity")
+            .args(["--file-selection", "--directory", "--title=Select working directory"])
+            .output()
+            .await
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut path = stdout.trim().to_string();
+                if path.len() > 1 && path.ends_with('/') {
+                    path.pop();
+                }
+                if !path.is_empty() {
+                    return Ok(Some(path));
+                }
+                return Ok(None);
+            }
+            if output.status.code() == Some(1) {
+                return Ok(None);
+            }
+        }
+
+        if let Ok(output) = tokio::process::Command::new("kdialog")
+            .args(["--getexistingdirectory", "--title", "Select working directory"])
+            .output()
+            .await
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut path = stdout.trim().to_string();
+                if path.len() > 1 && path.ends_with('/') {
+                    path.pop();
+                }
+                if !path.is_empty() {
+                    return Ok(Some(path));
+                }
+                return Ok(None);
+            }
+            if output.status.code() == Some(1) {
+                return Ok(None);
+            }
+        }
+
+        Err("Native folder picker is not supported or not installed (requires zenity or kdialog)".to_string())
+    }
+}
+
 async fn choose_folder() -> Json<serde_json::Value> {
-    let folder = rfd::AsyncFileDialog::new()
-        .set_title("Select working directory")
-        .pick_folder()
-        .await;
-    match folder {
-        Some(handle) => {
-            let path_str = handle.path().to_string_lossy().to_string();
+    match pick_folder_native().await {
+        Ok(Some(path_str)) => {
             crate::recent_cwds::add_recent_cwd(&path_str).await;
             Json(serde_json::json!({ "cwd": path_str }))
         }
-        None => Json(serde_json::json!({ "cwd": null })),
+        Ok(None) => Json(serde_json::json!({ "cwd": null })),
+        Err(err) => Json(serde_json::json!({ "cwd": null, "error": err })),
     }
 }
 
