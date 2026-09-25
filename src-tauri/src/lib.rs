@@ -143,6 +143,8 @@ fn start_desktop_daemon_sync(app_handle: tauri::AppHandle, daemon_info: daemon::
         loop {
             interval.tick().await;
 
+            let cur_daemon = daemon::read_daemon_info().unwrap_or_else(|| daemon_info.clone());
+
             // 1. Push latest UpdateStatus to daemon if changed
             if let Some(state) = app_handle.try_state::<updater::UpdateState>() {
                 let current_status = {
@@ -152,10 +154,10 @@ fn start_desktop_daemon_sync(app_handle: tauri::AppHandle, daemon_info: daemon::
 
                 if last_status.as_ref() != Some(&current_status) {
                     last_status = Some(current_status.clone());
-                    let url = format!("http://127.0.0.1:{}/api/daemon/updater-status", daemon_info.port);
+                    let url = format!("http://127.0.0.1:{}/api/daemon/updater-status", cur_daemon.port);
                     let _ = client
                         .post(&url)
-                        .header("X-Termi-Token", &daemon_info.token)
+                        .header("X-Termi-Token", &cur_daemon.token)
                         .json(&current_status)
                         .send()
                         .await;
@@ -163,10 +165,10 @@ fn start_desktop_daemon_sync(app_handle: tauri::AppHandle, daemon_info: daemon::
             }
 
             // 2. Check if web client triggered updater action
-            let action_url = format!("http://127.0.0.1:{}/api/daemon/updater-action", daemon_info.port);
+            let action_url = format!("http://127.0.0.1:{}/api/daemon/updater-action", cur_daemon.port);
             if let Ok(resp) = client
                 .get(&action_url)
-                .header("X-Termi-Token", &daemon_info.token)
+                .header("X-Termi-Token", &cur_daemon.token)
                 .send()
                 .await
             {

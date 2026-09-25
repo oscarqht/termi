@@ -319,31 +319,32 @@ pub async fn install_and_relaunch_inner(app: &AppHandle) -> Result<(), String> {
 
     if let (Some(update), Some(bytes)) = (pending_update, downloaded_bytes) {
         println!("[termi] Installing downloaded update package...");
-        match update.install(bytes) {
-            Ok(_) => {
-                println!("[termi] Update installed successfully! Relaunching app...");
-                let handle = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    handle.restart();
-                });
-                Ok(())
-            }
-            Err(e) => {
-                let err_msg = format!("Failed to install update: {e}");
-                eprintln!("[termi] {err_msg}");
-                let state = app.state::<UpdateState>();
-                let mut mgr = state.0.lock().await;
-                mgr.status = UpdateStatus::Error {
-                    message: err_msg.clone(),
-                };
-                let _ = app.emit("termi://update-status", &mgr.status);
-                Err(err_msg)
-            }
+        if let Err(e) = update.install(bytes) {
+            let err_msg = format!("Failed to install update: {e}");
+            eprintln!("[termi] {err_msg}");
+            let state = app.state::<UpdateState>();
+            let mut mgr = state.0.lock().await;
+            mgr.status = UpdateStatus::Error {
+                message: err_msg.clone(),
+            };
+            let _ = app.emit("termi://update-status", &mgr.status);
+            return Err(err_msg);
         }
-    } else {
-        Err("No downloaded update package ready to install.".to_string())
+        println!("[termi] Update installed successfully! Relaunching app...");
     }
+
+    // Stop background daemon so the new binary version is cleanly spawned upon relaunch
+    if let Some(info) = crate::daemon::read_daemon_info() {
+        println!("[termi] Stopping background daemon before relaunch...");
+        let _ = crate::daemon::stop_daemon(&info).await;
+    }
+
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        handle.restart();
+    });
+    Ok(())
 }
 
 pub fn start_background_updater(app: AppHandle) {

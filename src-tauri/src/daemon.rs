@@ -151,20 +151,41 @@ pub async fn ensure_daemon_running() -> Result<DaemonInfo, String> {
         return Ok(dev_info);
     }
 
+    let current_version = env!("CARGO_PKG_VERSION");
     if let Some(info) = read_daemon_info() {
         if is_daemon_alive(&info).await {
-            println!("[termi] Connecting to existing background daemon on port {}", info.port);
-            return Ok(info);
+            if info.version == current_version {
+                println!("[termi] Connecting to existing background daemon on port {}", info.port);
+                return Ok(info);
+            } else {
+                println!(
+                    "[termi] Running daemon version ({}) does not match app version ({}). Upgrading daemon...",
+                    info.version, current_version
+                );
+                let _ = stop_daemon(&info).await;
+            }
         } else if is_process_alive(info.pid) {
             println!("[termi] Daemon process {} alive, waiting for response...", info.pid);
             tokio::time::sleep(Duration::from_millis(1000)).await;
             if is_daemon_alive(&info).await {
-                println!("[termi] Connecting to existing background daemon on port {}", info.port);
-                return Ok(info);
+                if info.version == current_version {
+                    println!("[termi] Connecting to existing background daemon on port {}", info.port);
+                    return Ok(info);
+                } else {
+                    println!(
+                        "[termi] Running daemon version ({}) does not match app version ({}). Upgrading daemon...",
+                        info.version, current_version
+                    );
+                    let _ = stop_daemon(&info).await;
+                }
+            } else {
+                println!("[termi] Stale daemon file found (pid {}). Cleaning up...", info.pid);
+                remove_daemon_file();
             }
+        } else {
+            println!("[termi] Stale daemon file found (pid {}). Cleaning up...", info.pid);
+            remove_daemon_file();
         }
-        println!("[termi] Stale daemon file found (pid {}). Cleaning up...", info.pid);
-        remove_daemon_file();
     }
 
     // Check if an existing daemon is already listening on default port 3200 before spawning
@@ -177,17 +198,25 @@ pub async fn ensure_daemon_running() -> Result<DaemonInfo, String> {
                 if let Ok(info_resp) = client.get(&info_url).send().await {
                     if let Ok(json) = info_resp.json::<serde_json::Value>().await {
                         if let Some(pid) = json.get("pid").and_then(|v| v.as_u64()) {
+                            let daemon_ver = json.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
                             let recovered_info = DaemonInfo {
                                 pid: pid as u32,
                                 port: default_port,
                                 url: format!("http://127.0.0.1:{default_port}"),
-                                version: json.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                version: daemon_ver.clone(),
                                 token: String::new(),
                                 started_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
                             };
-                            let _ = write_daemon_info(&recovered_info);
-                            println!("[termi] Reconnected to existing background daemon on port {default_port}");
-                            return Ok(recovered_info);
+                            if daemon_ver == current_version {
+                                let _ = write_daemon_info(&recovered_info);
+                                println!("[termi] Reconnected to existing background daemon on port {default_port}");
+                                return Ok(recovered_info);
+                            } else {
+                                println!(
+                                    "[termi] Existing daemon version ({daemon_ver}) on port {default_port} does not match app version ({current_version}). Upgrading daemon...",
+                                );
+                                let _ = stop_daemon(&recovered_info).await;
+                            }
                         }
                     }
                 }
@@ -282,11 +311,12 @@ pub async fn stop_daemon(info: &DaemonInfo) -> Result<(), String> {
         .send()
         .await;
 
-    // Wait up to 2 seconds for process to exit
+    // Wait up to 3 seconds for process to exit gracefully
     let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(2) {
+    while start.elapsed() < Duration::from_secs(3) {
         if !is_process_alive(info.pid) {
             remove_daemon_file();
+            tokio::time::sleep(Duration::from_millis(150)).await;
             return Ok(());
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -298,7 +328,23 @@ pub async fn stop_daemon(info: &DaemonInfo) -> Result<(), String> {
             libc::kill(info.pid as libc::pid_t, libc::SIGTERM);
         }
     }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/PID", &info.pid.to_string(), "/F"])
+            .output();
+    }
+
+    let kill_start = std::time::Instant::now();
+    while kill_start.elapsed() < Duration::from_secs(2) {
+        if !is_process_alive(info.pid) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
     remove_daemon_file();
+    tokio::time::sleep(Duration::from_millis(150)).await;
     Ok(())
 }
 
@@ -366,5 +412,29 @@ mod tests {
         assert!(prod_log.to_string_lossy().ends_with("daemon.log"));
         assert!(!prod_log.to_string_lossy().ends_with("daemon-dev.log"));
         std::env::remove_var("TERMI_ENV");
+    }
+
+    #[test]
+    fn test_daemon_version_mismatch_detection() {
+        let current_pkg_version = env!("CARGO_PKG_VERSION");
+        let matching_info = DaemonInfo {
+            pid: std::process::id(),
+            port: 3200,
+            url: "http://127.0.0.1:3200".to_string(),
+            version: current_pkg_version.to_string(),
+            token: "tok".to_string(),
+            started_at: 1000,
+        };
+        assert_eq!(matching_info.version, current_pkg_version);
+
+        let outdated_info = DaemonInfo {
+            pid: std::process::id(),
+            port: 3200,
+            url: "http://127.0.0.1:3200".to_string(),
+            version: "0.40.0".to_string(),
+            token: "tok".to_string(),
+            started_at: 1000,
+        };
+        assert_ne!(outdated_info.version, current_pkg_version);
     }
 }

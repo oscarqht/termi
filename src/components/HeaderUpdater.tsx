@@ -201,24 +201,47 @@ export default function HeaderUpdater() {
                 </p>
               </div>
             ) : status.status === 'UpToDate' ? (
-              <div className="updater-state-box">
-                <div className="updater-icon-circle success">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
+              currentVersion && status.data.current_version && currentVersion !== status.data.current_version ? (
+                <div className="updater-state-box">
+                  <div className="updater-icon-circle error">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </div>
+                  <p className="updater-state-title">Restart required</p>
+                  <p className="updater-state-desc">
+                    Termi has updated to <strong>v{status.data.current_version}</strong>, but the background server is running <strong>v{currentVersion}</strong>. Restart to complete the update.
+                  </p>
+                  <button
+                    type="button"
+                    className="primary small updater-action-btn"
+                    onClick={handleInstall}
+                  >
+                    Restart server
+                  </button>
                 </div>
-                <p className="updater-state-title">You're up to date!</p>
-                <p className="updater-state-desc">
-                  Termi <strong>v{status.data.current_version}</strong> is the latest version available.
-                </p>
-                <button
-                  type="button"
-                  className="secondary small updater-action-btn"
-                  onClick={handleCheckNow}
-                >
-                  Check again
-                </button>
-              </div>
+              ) : (
+                <div className="updater-state-box">
+                  <div className="updater-icon-circle success">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </div>
+                  <p className="updater-state-title">You're up to date!</p>
+                  <p className="updater-state-desc">
+                    Termi <strong>v{currentVersion || status.data.current_version}</strong> is the latest version available.
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary small updater-action-btn"
+                    onClick={handleCheckNow}
+                  >
+                    Check again
+                  </button>
+                </div>
+              )
             ) : status.status === 'Downloading' ? (
               <div className="updater-state-box">
                 <div className="updater-version-pills">
