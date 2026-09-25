@@ -1,5 +1,6 @@
 pub mod custom_scripts;
 pub mod daemon;
+pub mod git;
 pub mod prompts;
 pub mod recent_cwds;
 pub mod server;

@@ -45,6 +45,10 @@ export async function fetchGitInfo(cwd: string): Promise<GitInfo> {
     if (!res.ok) {
       return { isRepo: false };
     }
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return { isRepo: false };
+    }
     return await res.json();
   } catch (err) {
     return { isRepo: false, error: (err as Error).message };

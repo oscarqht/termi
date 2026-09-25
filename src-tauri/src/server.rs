@@ -5,7 +5,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use futures::{SinkExt, StreamExt};
 use tokio::io::AsyncWriteExt;
@@ -97,10 +97,14 @@ fn unique_dest_path(dir: &Path, name: &str) -> PathBuf {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateSessionBody {
     pub cwd: Option<String>,
     pub cmd: Option<String>,
     pub title: Option<String>,
+    pub base_branch: Option<String>,
+    pub new_branch: Option<String>,
+    pub existing_worktree_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -148,13 +152,68 @@ async fn create_session(
     Json(body): Json<CreateSessionBody>,
 ) -> Result<Json<SessionInfo>, (StatusCode, Json<serde_json::Value>)> {
     let req_cwd = body.cwd.unwrap_or_else(default_cwd);
-    let resolved_cwd = if req_cwd.starts_with('~') {
+    let mut resolved_cwd = if req_cwd.starts_with('~') {
         dirs::home_dir()
             .map(|h| req_cwd.replacen('~', &h.to_string_lossy(), 1))
             .unwrap_or(req_cwd)
     } else {
         req_cwd
     };
+
+    let mut title = body.title.unwrap_or_default();
+    let mut banner: Option<String> = None;
+
+    if let (Some(base_branch), Some(new_branch_input)) = (body.base_branch, body.new_branch) {
+        if !base_branch.trim().is_empty() && !new_branch_input.trim().is_empty() {
+            let info = crate::git::get_git_info(&resolved_cwd).await;
+            if !info.is_repo || info.repo_root.is_none() {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": format!("Specified path is not a git repository: {resolved_cwd}") })),
+                ));
+            }
+            let repo_root = info.repo_root.unwrap();
+            match crate::git::create_worktree_session(&repo_root, &base_branch, &new_branch_input).await {
+                Ok(res) => {
+                    resolved_cwd = res.worktree_path;
+                    if title.is_empty() {
+                        title = res.branch.clone();
+                    }
+                    let warning_line = if let Some(w) = res.remote_sync_warning {
+                        format!("\x1b[33m[termi] Warning: {w}\x1b[0m\r\n")
+                    } else {
+                        String::new()
+                    };
+                    banner = Some(format!(
+                        "\x1b[36m[termi] Created worktree for branch \x1b[1m{}\x1b[22m (from {})\x1b[0m\r\n{}\r\n",
+                        res.branch, res.base_branch, warning_line
+                    ));
+                }
+                Err(e) => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({ "error": e })),
+                    ));
+                }
+            }
+        }
+    } else if let Some(existing_wt) = body.existing_worktree_path {
+        if !existing_wt.trim().is_empty() {
+            let p = Path::new(&existing_wt);
+            if !p.exists() || !p.is_dir() {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": format!("Worktree path does not exist: {existing_wt}") })),
+                ));
+            }
+            resolved_cwd = existing_wt.clone();
+            if let Err(e) = crate::git::sync_existing_worktree(&resolved_cwd).await {
+                banner = Some(format!("\x1b[33m[termi] Worktree resumed. Rebase sync warning: {}\x1b[0m\r\n\r\n", e));
+            } else {
+                banner = Some("\x1b[32m[termi] Worktree resumed and synced with remote.\x1b[0m\r\n\r\n".to_string());
+            }
+        }
+    }
 
     let p = Path::new(&resolved_cwd);
     if !p.exists() || !p.is_dir() {
@@ -165,11 +224,95 @@ async fn create_session(
     }
 
     let cmd = body.cmd.unwrap_or_default();
-    let title = body.title.unwrap_or_default();
-    match state.session_manager.create(resolved_cwd.clone(), cmd, title).await {
+    match state.session_manager.create(resolved_cwd.clone(), cmd, title, banner).await {
         Ok(session) => {
             crate::recent_cwds::add_recent_cwd(&resolved_cwd).await;
             Ok(Json(session.get_info()))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e })),
+        )),
+    }
+}
+
+#[derive(Deserialize, Default)]
+pub struct GitInfoQuery {
+    pub cwd: Option<String>,
+}
+
+async fn get_git_info_handler(
+    Query(query): Query<GitInfoQuery>,
+) -> Json<crate::git::GitInfo> {
+    let cwd = query.cwd.unwrap_or_else(default_cwd);
+    let resolved_cwd = if cwd.starts_with('~') {
+        dirs::home_dir()
+            .map(|h| cwd.replacen('~', &h.to_string_lossy(), 1))
+            .unwrap_or(cwd)
+    } else {
+        cwd
+    };
+    let info = crate::git::get_git_info(&resolved_cwd).await;
+    Json(info)
+}
+
+#[derive(Deserialize)]
+pub struct NormalizeBranchBody {
+    pub branch: Option<String>,
+}
+
+async fn normalize_branch_handler(
+    Json(body): Json<NormalizeBranchBody>,
+) -> Json<serde_json::Value> {
+    let raw = body.branch.unwrap_or_default();
+    let normalized = crate::git::normalize_branch_name(&raw);
+    Json(serde_json::json!({ "normalized": normalized }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteWorktreeBody {
+    pub cwd: Option<String>,
+    pub worktree_path: Option<String>,
+    pub branch: Option<String>,
+}
+
+async fn delete_worktree_handler(
+    Json(body): Json<DeleteWorktreeBody>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let cwd = body.cwd.unwrap_or_else(default_cwd);
+    let resolved_cwd = if cwd.starts_with('~') {
+        dirs::home_dir()
+            .map(|h| cwd.replacen('~', &h.to_string_lossy(), 1))
+            .unwrap_or(cwd)
+    } else {
+        cwd
+    };
+
+    let worktree_path = body.worktree_path.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "worktreePath is required" })),
+        )
+    })?;
+
+    let info = crate::git::get_git_info(&resolved_cwd).await;
+    if !info.is_repo || info.repo_root.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "Specified cwd is not a git repository" })),
+        ));
+    }
+    let repo_root = info.repo_root.as_ref().unwrap();
+
+    match crate::git::delete_worktree(repo_root, &worktree_path, body.branch.as_deref()).await {
+        Ok(res) => {
+            let updated_info = crate::git::get_git_info(repo_root).await;
+            Ok(Json(serde_json::json!({
+                "ok": res.ok,
+                "branchDeleted": res.branch_deleted,
+                "gitInfo": updated_info,
+            })))
         }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -919,6 +1062,9 @@ pub async fn start_server(
                 .delete(delete_recent_cwd_handler),
         )
         .route("/api/choose-folder", post(choose_folder))
+        .route("/api/git/info", get(get_git_info_handler))
+        .route("/api/git/normalize-branch", post(normalize_branch_handler))
+        .route("/api/git/worktrees", delete(delete_worktree_handler))
         .route(
             "/api/prompts",
             get(get_saved_prompts_handler).put(save_saved_prompts_handler),

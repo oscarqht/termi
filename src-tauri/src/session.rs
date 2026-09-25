@@ -523,6 +523,7 @@ impl SessionManager {
         cwd: String,
         cmd: String,
         title: String,
+        banner: Option<String>,
     ) -> Result<Arc<Session>, String> {
         let id = Uuid::new_v4().to_string();
         let (tx, _rx) = broadcast::channel(512);
@@ -549,6 +550,12 @@ impl SessionManager {
             tx,
             upload_dir,
         });
+
+        if let Some(b) = banner {
+            if !b.is_empty() {
+                session.buffer.write().await.write(b);
+            }
+        }
 
         spawn_pty(&session, self.clone())?;
 
